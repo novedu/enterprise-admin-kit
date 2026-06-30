@@ -1,0 +1,83 @@
+:root,
+:root[data-theme='light'] {
+  color-scheme: light;
+  --app-bg: #f4f6f8;
+  --app-bg-elevated: #eef2f7;
+  --app-text: #202938;
+  --app-heading: #0f172a;
+  --app-primary: #315fda;
+  --app-success: #0f9f6e;
+  --app-warning: #d97706;
+  --app-danger: #dc2626;
+  --app-panel: #ffffff;
+  --app-panel-soft: #f8fafc;
+  --app-panel-muted: #edf4ff;
+  --app-panel-hover: #f1f5f9;
+  --app-border: #d9e2ec;
+  --app-border-subtle: #edf2f7;
+  --app-muted: #5f6f84;
+  --app-sidebar: #121b2d;
+  --app-sidebar-text: #cbd5e1;
+  --app-sidebar-subtle: #94a3b8;
+  --app-sidebar-active: #315fda;
+  --app-header: #ffffff;
+  --app-shadow: 0 8px 24px rgba(15, 23, 42, 0.055);
+  --app-shadow-strong: 0 16px 40px rgba(15, 23, 42, 0.12);
+  --app-code-bg: #111827;
+  --app-code-text: #e5e7eb;
+  --app-warning-soft: #fff7ed;
+  --app-warning-text: #9a3412;
+  --el-bg-color: var(--app-panel);
+  --el-bg-color-page: var(--app-bg);
+  --el-bg-color-overlay: var(--app-panel);
+  --el-text-color-primary: var(--app-text);
+  --el-text-color-regular: var(--app-text);
+  --el-text-color-secondary: var(--app-muted);
+  --el-border-color: var(--app-border);
+  --el-border-color-light: var(--app-border);
+  --el-fill-color-blank: var(--app-panel);
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --app-bg: #10151f;
+  --app-bg-elevated: #141b28;
+  --app-text: #d7dee9;
+  --app-heading: #f8fafc;
+  --app-primary: #4f8cff;
+  --app-success: #22c55e;
+  --app-warning: #f59e0b;
+  --app-danger: #f87171;
+  --app-panel: #171d29;
+  --app-panel-soft: #202838;
+  --app-panel-muted: #172b46;
+  --app-panel-hover: #242d3d;
+  --app-border: #303a4d;
+  --app-border-subtle: #252d3d;
+  --app-muted: #9aa7b8;
+  --app-sidebar: #111827;
+  --app-sidebar-text: #d7dee9;
+  --app-sidebar-subtle: #8b98aa;
+  --app-sidebar-active: #2563eb;
+  --app-header: #171d29;
+  --app-shadow: 0 10px 26px rgba(0, 0, 0, 0.28);
+  --app-shadow-strong: 0 18px 44px rgba(0, 0, 0, 0.36);
+  --app-code-bg: #0b1120;
+  --app-code-text: #e5edf8;
+  --app-warning-soft: #3a2816;
+  --app-warning-text: #fbbf24;
+  --el-bg-color: var(--app-panel);
+  --el-bg-color-page: var(--app-bg);
+  --el-bg-color-overlay: var(--app-panel);
+  --el-text-color-primary: var(--app-text);
+  --el-text-color-regular: var(--app-text);
+  --el-text-color-secondary: var(--app-muted);
+  --el-border-color: var(--app-border);
+  --el-border-color-light: var(--app-border);
+  --el-fill-color-blank: var(--app-panel);
+  --el-fill-color-light: var(--app-panel-soft);
+}
+
+html {
+  background: var(--app-bg);
+}
