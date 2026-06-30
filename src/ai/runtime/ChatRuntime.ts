@@ -1,7 +1,13 @@
 import type { EventBus } from '@/ai/events/EventBus'
-import type { ChatMessage, ChatMessageStatus, ChatRequest, Provider, TokenUsage } from '@/ai/types'
-
-type RuntimeListener = (messages: ChatMessage[], status: ChatMessageStatus) => void
+import { DEFAULT_AI_CONFIG } from '@/ai/config/defaultConfig'
+import type {
+  AIConfigReader,
+  ChatMessage,
+  ChatMessageStatus,
+  ChatRequest,
+  Provider,
+  TokenUsage,
+} from '@/ai/types'
 
 function createId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`
@@ -13,6 +19,10 @@ function now() {
 
 function cloneMessages(messages: ChatMessage[]) {
   return messages.map((message) => ({ ...message }))
+}
+
+function getVisibleMessages(messages: ChatMessage[]) {
+  return cloneMessages(messages.filter((message) => message.role !== 'system'))
 }
 
 function estimateTokenUsage(promptMessages: ChatMessage[], completionText: string): TokenUsage {
@@ -30,11 +40,11 @@ export class ChatRuntime {
   private messages: ChatMessage[] = []
   private status: ChatMessageStatus = 'idle'
   private lastRequest: ChatRequest | null = null
-  private listeners = new Set<RuntimeListener>()
 
   constructor(
     private provider: Provider,
     private eventBus: EventBus,
+    private readConfig: AIConfigReader = () => DEFAULT_AI_CONFIG,
   ) {}
 
   getMessages() {
@@ -45,13 +55,8 @@ export class ChatRuntime {
     return this.status
   }
 
-  subscribe(listener: RuntimeListener) {
-    this.listeners.add(listener)
-    listener(this.getMessages(), this.status)
-
-    return () => {
-      this.listeners.delete(listener)
-    }
+  getDefaultModel() {
+    return this.readConfig().model || this.provider.models[0]
   }
 
   async sendMessage(request: ChatRequest) {
@@ -69,15 +74,18 @@ export class ChatRuntime {
     this.controller = new AbortController()
     let fullText = ''
 
+    this.eventBus.emit('chat:start', {
+      conversationId: normalizedRequest.conversationId,
+      message: assistantMessage,
+      messages: getVisibleMessages(this.messages),
+      status: 'loading',
+    })
+
     try {
       await this.provider.streamChatCompletion(
         normalizedRequest,
         {
-          onStart: () => {
-            this.eventBus.emit('chat:start', {
-              conversationId: normalizedRequest.conversationId,
-            })
-          },
+          onStart: () => undefined,
           onChunk: (chunk) => {
             if (chunk.done) return
 
@@ -90,6 +98,8 @@ export class ChatRuntime {
             this.eventBus.emit('chat:chunk', {
               messageId: assistantMessage.id,
               chunk: chunk.delta,
+              fullText,
+              status: 'streaming',
             })
           },
           onFinish: (text) => {
@@ -99,15 +109,19 @@ export class ChatRuntime {
         this.controller.signal,
       )
 
+      const tokenUsage = estimateTokenUsage(normalizedRequest.messages, fullText)
+
       this.updateAssistantMessage(assistantMessage.id, {
         content: fullText,
         status: 'done',
-        tokenUsage: estimateTokenUsage(normalizedRequest.messages, fullText),
+        tokenUsage,
       })
       this.setStatus('done')
       this.eventBus.emit('chat:finish', {
         messageId: assistantMessage.id,
         fullText,
+        tokenUsage,
+        status: 'done',
       })
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') {
@@ -117,6 +131,7 @@ export class ChatRuntime {
         this.setStatus('cancelled')
         this.eventBus.emit('chat:abort', {
           messageId: assistantMessage.id,
+          status: 'cancelled',
         })
         return
       }
@@ -132,6 +147,7 @@ export class ChatRuntime {
       this.eventBus.emit('chat:error', {
         messageId: assistantMessage.id,
         error: message,
+        status: 'error',
       })
     } finally {
       this.controller = null
@@ -146,7 +162,6 @@ export class ChatRuntime {
     if (!lastRequest || this.isBusy()) return
 
     this.messages = lastRequest.messages
-    this.notify()
     this.sendMessage(lastRequest)
   }
 
@@ -159,8 +174,10 @@ export class ChatRuntime {
   }
 
   private normalizeRequest(request: ChatRequest): ChatRequest {
+    const config = this.readConfig()
     const conversationId = request.conversationId || createId('conversation')
-    const messages = request.messages.map((message) => ({
+    const requestMessages = this.applySystemPrompt(request.messages, config.systemPrompt)
+    const messages = requestMessages.map((message) => ({
       ...message,
       id: message.id || createId(message.role),
       status: message.status || 'done',
@@ -172,9 +189,46 @@ export class ChatRuntime {
       ...request,
       conversationId,
       messages,
-      model: request.model || this.provider.models[0],
-      stream: request.stream ?? true,
+      provider: request.provider ?? config.provider,
+      model: request.model || config.model || this.provider.models[0],
+      temperature: request.temperature ?? config.temperature,
+      topP: request.topP ?? config.topP,
+      maxTokens: request.maxTokens ?? config.maxTokens,
+      stream: request.stream ?? config.stream,
+      enableKnowledge: request.enableKnowledge ?? config.enableKnowledge,
+      enableCache: request.enableCache ?? config.enableCache,
+      contextWindow: request.contextWindow ?? config.contextWindow,
+      compressionStrategy: request.compressionStrategy ?? config.compressionStrategy,
     }
+  }
+
+  private applySystemPrompt(messages: ChatMessage[], systemPrompt: string) {
+    if (!systemPrompt.trim()) return messages
+
+    const timestamp = now()
+    const systemMessage: ChatMessage = {
+      id: 'system-runtime-prompt',
+      role: 'system',
+      content: systemPrompt,
+      status: 'done',
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    }
+
+    const existingSystemIndex = messages.findIndex((message) => message.role === 'system')
+    if (existingSystemIndex === -1) {
+      return [systemMessage, ...messages]
+    }
+
+    return messages.map((message, index) =>
+      index === existingSystemIndex
+        ? {
+            ...message,
+            content: systemPrompt,
+            updatedAt: timestamp,
+          }
+        : message,
+    )
   }
 
   private createAssistantMessage(): ChatMessage {
@@ -203,20 +257,10 @@ export class ChatRuntime {
           }
         : message,
     )
-    this.notify()
   }
 
   private setStatus(status: ChatMessageStatus) {
     this.status = status
-    this.notify()
-  }
-
-  private notify() {
-    const messages = this.getMessages()
-
-    for (const listener of this.listeners) {
-      listener(messages, this.status)
-    }
   }
 
   private isBusy() {

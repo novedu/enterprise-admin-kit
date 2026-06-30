@@ -2,13 +2,11 @@ import { storeToRefs } from 'pinia'
 import { computed } from 'vue'
 
 import { runtimeEventBus } from '@/ai/events/runtimeBus'
-import { MockProvider } from '@/ai/providers/MockProvider'
-import { ChatRuntime } from '@/ai/runtime/ChatRuntime'
+import { getChatRuntime } from '@/ai/runtime/runtimeInstance'
 import type { ChatMessage, ChatRequest } from '@/ai/types'
 import { useChatStore } from '@/store'
 
-let runtime: ChatRuntime | null = null
-let unsubscribe: (() => void) | null = null
+let eventsBound = false
 
 function createUserMessage(content: string): ChatMessage {
   const timestamp = Date.now()
@@ -25,15 +23,25 @@ function createUserMessage(content: string): ChatMessage {
 
 export function useChatRuntime() {
   const store = useChatStore()
+  const runtime = getChatRuntime()
 
-  if (!runtime) {
-    runtime = new ChatRuntime(new MockProvider(), runtimeEventBus)
-  }
-
-  if (!unsubscribe) {
-    unsubscribe = runtime.subscribe((messages, status) => {
-      store.syncRuntimeSnapshot(messages, status)
+  if (!eventsBound) {
+    runtimeEventBus.on('chat:start', ({ message, messages, status }) => {
+      store.startAssistantMessage(message, status, messages)
     })
+    runtimeEventBus.on('chat:chunk', ({ messageId, fullText, status }) => {
+      store.appendAssistantChunk(messageId, fullText, status)
+    })
+    runtimeEventBus.on('chat:finish', ({ messageId, fullText, tokenUsage, status }) => {
+      store.finishAssistantMessage(messageId, fullText, tokenUsage, status)
+    })
+    runtimeEventBus.on('chat:error', ({ messageId, error, status }) => {
+      store.failAssistantMessage(messageId, error, status)
+    })
+    runtimeEventBus.on('chat:abort', ({ messageId, status }) => {
+      store.abortAssistantMessage(messageId, status)
+    })
+    eventsBound = true
   }
 
   const { messages, status } = storeToRefs(store)
@@ -45,19 +53,22 @@ export function useChatRuntime() {
     streaming,
     sendMessage: (prompt: string) => {
       const text = prompt.trim()
-      if (!text || !runtime) return
+      if (!text) return
+      const userMessage = createUserMessage(text)
 
       const request: ChatRequest = {
         conversationId: `conversation-${Date.now()}`,
-        messages: runtime.getMessages().concat(createUserMessage(text)),
-        model: 'mock-chat-runtime',
-        stream: true,
+        messages: runtime.getMessages().concat(userMessage),
+        model: runtime.getDefaultModel(),
       }
 
       return runtime.sendMessage(request)
     },
-    stop: () => runtime?.stop(),
-    retry: () => runtime?.retry(),
-    clear: () => runtime?.clear(),
+    stop: () => runtime.stop(),
+    retry: () => runtime.retry(),
+    clear: () => {
+      runtime.clear()
+      store.clear()
+    },
   }
 }

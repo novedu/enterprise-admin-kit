@@ -4,6 +4,10 @@ export type ChatMessageStatus = 'idle' | 'loading' | 'streaming' | 'done' | 'err
 
 export type ChatRuntimeStatus = ChatMessageStatus
 
+export type AIProviderName = 'mock' | 'openai' | 'claude' | 'qwen' | 'deepseek'
+
+export type CompressionStrategy = 'none' | 'window' | 'summary' | 'hybrid'
+
 export interface TokenUsage {
   promptTokens: number
   completionTokens: number
@@ -44,8 +48,14 @@ export interface ChatRequest {
   messages: ChatMessage[]
   model: string
   temperature?: number
+  topP?: number
   maxTokens?: number
   stream?: boolean
+  provider?: AIProviderName
+  enableKnowledge?: boolean
+  enableCache?: boolean
+  contextWindow?: number
+  compressionStrategy?: CompressionStrategy
 }
 
 export interface StreamChunk {
@@ -85,13 +95,19 @@ export interface RuntimeEvent {
 }
 
 export interface AIConfig {
-  provider: string
+  provider: AIProviderName
   model: string
   temperature: number
+  topP: number
   maxTokens: number
-  topP?: number
   stream: boolean
   enableKnowledge: boolean
+  enableCache: boolean
   contextWindow: number
-  compressionStrategy: 'none' | 'window' | 'summary' | 'hybrid'
+  compressionStrategy: CompressionStrategy
+  systemPrompt: string
 }
+
+export type AIConfigPatch = Partial<AIConfig>
+
+export type AIConfigReader = () => AIConfig

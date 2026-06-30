@@ -1,4 +1,14 @@
-import { computed, onMounted, ref, shallowRef, unref, watch, type MaybeRefOrGetter } from 'vue'
+import {
+  computed,
+  onMounted,
+  ref,
+  shallowRef,
+  unref,
+  watch,
+  type MaybeRefOrGetter,
+  type Ref,
+  type ShallowRef,
+} from 'vue'
 
 import {
   fetchWithCache,
@@ -16,6 +26,18 @@ export interface UseRequestCacheOptions<T> extends RequestCacheOptions {
   initialData?: T
 }
 
+export interface UseRequestCacheReturn<T> {
+  data: ShallowRef<T | undefined>
+  error: Ref<unknown>
+  loading: Ref<boolean>
+  updatedAt: Ref<number>
+  isStale: Readonly<Ref<boolean>>
+  refetch: () => Promise<T | undefined>
+  invalidate: () => void
+  remove: () => void
+  execute: (force?: boolean) => Promise<T | undefined>
+}
+
 function resolveValue<T>(value: MaybeRefOrGetter<T>): T {
   return typeof value === 'function' ? (value as () => T)() : unref(value)
 }
@@ -24,7 +46,7 @@ export function useRequestCache<T>(
   key: MaybeRefOrGetter<RequestCacheKey>,
   fetcher: () => Promise<T>,
   options: UseRequestCacheOptions<T> = {},
-) {
+): UseRequestCacheReturn<T> {
   const data = shallowRef<T | undefined>(options.initialData)
   const error = ref<unknown>()
   const loading = ref(false)
