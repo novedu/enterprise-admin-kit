@@ -1,12 +1,13 @@
 import type { EventBus } from '@/ai/events/EventBus'
 import { DEFAULT_AI_CONFIG } from '@/ai/config/defaultConfig'
+import { ContextManager } from '@/ai/context/ContextManager'
+import { estimateCompletionTokenUsage } from '@/ai/context/tokenEstimator'
 import type {
   AIConfigReader,
   ChatMessage,
   ChatMessageStatus,
   ChatRequest,
   IProvider,
-  TokenUsage,
 } from '@/ai/types'
 
 function createId(prefix: string) {
@@ -25,16 +26,6 @@ function getVisibleMessages(messages: ChatMessage[]) {
   return cloneMessages(messages.filter((message) => message.role !== 'system'))
 }
 
-function estimateTokenUsage(promptMessages: ChatMessage[], completionText: string): TokenUsage {
-  const completionTokens = Math.ceil(completionText.length / 4)
-
-  return {
-    promptTokens: 100,
-    completionTokens,
-    totalTokens: 100 + completionTokens,
-  }
-}
-
 export class ChatRuntime {
   private controller: AbortController | null = null
   private messages: ChatMessage[] = []
@@ -45,6 +36,7 @@ export class ChatRuntime {
     private provider: IProvider,
     private eventBus: EventBus,
     private readConfig: AIConfigReader = () => DEFAULT_AI_CONFIG,
+    private contextManager = new ContextManager(),
   ) {}
 
   getMessages() {
@@ -113,7 +105,7 @@ export class ChatRuntime {
         this.controller.signal,
       )
 
-      const tokenUsage = estimateTokenUsage(normalizedRequest.messages, fullText)
+      const tokenUsage = estimateCompletionTokenUsage(normalizedRequest.messages, fullText)
 
       this.updateAssistantMessage(assistantMessage.id, {
         content: fullText,
@@ -181,13 +173,17 @@ export class ChatRuntime {
     const config = this.readConfig()
     const conversationId = request.conversationId || createId('conversation')
     const requestMessages = this.applySystemPrompt(request.messages, config.systemPrompt)
-    const messages = requestMessages.map((message) => ({
+    const normalizedMessages = requestMessages.map((message) => ({
       ...message,
       id: message.id || createId(message.role),
       status: message.status || 'done',
       createdAt: message.createdAt || now(),
       updatedAt: now(),
     }))
+    const messages = this.contextManager.build(normalizedMessages, {
+      contextWindow: request.contextWindow ?? config.contextWindow,
+      compressionStrategy: request.compressionStrategy ?? config.compressionStrategy,
+    })
 
     return {
       ...request,
