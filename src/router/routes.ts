@@ -50,7 +50,7 @@ export const asyncChildren: RouteRecordRaw[] = [
     name: 'AI',
     component: () => import('@/pages/ai/index.vue'),
     meta: {
-      title: 'AI Chat',
+      title: 'AI Admin Console',
       titleKey: 'menu.ai',
       icon: 'ChatDotRound',
     },

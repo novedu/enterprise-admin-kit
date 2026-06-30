@@ -98,9 +98,17 @@ export interface RuntimeEvent {
   timestamp: number
 }
 
+export interface ProviderCredential {
+  apiKey: string
+  baseUrl: string
+  organizationId?: string
+  projectId?: string
+}
+
 export interface AIConfig {
   provider: AIProviderName
   model: string
+  providerCredentials: Partial<Record<AIProviderName, ProviderCredential>>
   temperature: number
   topP: number
   maxTokens: number
