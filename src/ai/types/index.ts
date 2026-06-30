@@ -66,20 +66,24 @@ export interface StreamChunk {
   index: number
 }
 
-export interface Provider {
+export interface ProviderStreamCallbacks {
+  onStart?: () => void
+  onChunk?: (chunk: StreamChunk) => void
+  onFinish?: (fullText: string) => void
+  onError?: (error: Error) => void
+}
+
+export interface IProvider {
   name: string
   models: string[]
-  streamChatCompletion(
+  streamChat(
     request: ChatRequest,
-    callbacks: {
-      onStart?: () => void
-      onChunk?: (chunk: StreamChunk) => void
-      onFinish?: (fullText: string) => void
-      onError?: (error: Error) => void
-    },
+    callbacks: ProviderStreamCallbacks,
     signal?: AbortSignal,
   ): Promise<void>
 }
+
+export type Provider = IProvider
 
 export interface RuntimeEvent {
   type:

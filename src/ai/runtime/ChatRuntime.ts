@@ -5,7 +5,7 @@ import type {
   ChatMessage,
   ChatMessageStatus,
   ChatRequest,
-  Provider,
+  IProvider,
   TokenUsage,
 } from '@/ai/types'
 
@@ -42,7 +42,7 @@ export class ChatRuntime {
   private lastRequest: ChatRequest | null = null
 
   constructor(
-    private provider: Provider,
+    private provider: IProvider,
     private eventBus: EventBus,
     private readConfig: AIConfigReader = () => DEFAULT_AI_CONFIG,
   ) {}
@@ -56,7 +56,11 @@ export class ChatRuntime {
   }
 
   getDefaultModel() {
-    return this.readConfig().model || this.provider.models[0]
+    return this.resolveModel(this.readConfig().model)
+  }
+
+  setProvider(provider: IProvider) {
+    this.provider = provider
   }
 
   async sendMessage(request: ChatRequest) {
@@ -82,7 +86,7 @@ export class ChatRuntime {
     })
 
     try {
-      await this.provider.streamChatCompletion(
+      await this.provider.streamChat(
         normalizedRequest,
         {
           onStart: () => undefined,
@@ -190,7 +194,7 @@ export class ChatRuntime {
       conversationId,
       messages,
       provider: request.provider ?? config.provider,
-      model: request.model || config.model || this.provider.models[0],
+      model: this.resolveModel(request.model || config.model),
       temperature: request.temperature ?? config.temperature,
       topP: request.topP ?? config.topP,
       maxTokens: request.maxTokens ?? config.maxTokens,
@@ -229,6 +233,12 @@ export class ChatRuntime {
           }
         : message,
     )
+  }
+
+  private resolveModel(model?: string) {
+    if (model && this.provider.models.includes(model)) return model
+
+    return this.provider.models[0] || model || 'unknown-model'
   }
 
   private createAssistantMessage(): ChatMessage {

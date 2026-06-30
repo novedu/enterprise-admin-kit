@@ -44,11 +44,19 @@ export const useAiConfigStore = defineStore('aiConfig', {
     setProvider(provider: AIProviderName) {
       this.provider = provider
       persistConfig(this.currentConfig)
+      runtimeEventBus.emit('provider:change', {
+        provider,
+        model: this.model,
+      })
       emitConfigUpdates({ provider })
     },
     setModel(model: string) {
       this.model = model
       persistConfig(this.currentConfig)
+      runtimeEventBus.emit('provider:change', {
+        provider: this.provider,
+        model,
+      })
       emitConfigUpdates({ model })
     },
     resetConfig() {
