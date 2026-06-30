@@ -1,4 +1,4 @@
-import { chunkDocument, type ChunkDocumentOptions } from './chunker'
+import { chunkDocument, normalizeChunkSize, type ChunkDocumentOptions } from './chunker'
 import { createCitations } from './citation'
 import { retrieveChunks } from './retriever'
 import type {
@@ -12,7 +12,12 @@ import type {
 export interface KnowledgeBaseOptions extends ChunkDocumentOptions {
   id: string
   name: string
+  maxDocumentChars?: number
+  maxDocuments?: number
 }
+
+const DEFAULT_MAX_DOCUMENT_CHARS = 60_000
+const DEFAULT_MAX_DOCUMENTS = 100
 
 function createId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`
@@ -33,15 +38,37 @@ export class KnowledgeBase {
   }
 
   uploadDocument(input: UploadDocumentInput) {
+    const title = input.title.trim()
+    const content = input.content.trim()
+    const maxDocumentChars = this.options.maxDocumentChars ?? DEFAULT_MAX_DOCUMENT_CHARS
+    const maxDocuments = this.options.maxDocuments ?? DEFAULT_MAX_DOCUMENTS
+
+    if (!title) {
+      throw new Error('Knowledge document title is required.')
+    }
+
+    if (!content) {
+      throw new Error('Knowledge document content is required.')
+    }
+
+    if (content.length > maxDocumentChars) {
+      throw new Error(`Knowledge document exceeds ${maxDocumentChars} characters and was rejected.`)
+    }
+
+    if (this.documents.size >= maxDocuments) {
+      throw new Error(`Knowledge base ${this.id} reached the ${maxDocuments} document limit.`)
+    }
+
     const document: KnowledgeDocument = {
       id: createId('doc'),
-      title: input.title,
-      content: input.content,
+      workspaceId: this.id,
+      title,
+      content,
       createdAt: Date.now(),
     }
 
     const chunks = chunkDocument(document, {
-      chunkSize: this.options.chunkSize,
+      chunkSize: normalizeChunkSize(this.options.chunkSize),
     })
 
     this.documents.set(document.id, document)
@@ -64,7 +91,10 @@ export class KnowledgeBase {
   }
 
   retrieve(query: string, options: RetrieveOptions = {}) {
-    return retrieveChunks(query, this.getChunks(), options)
+    return retrieveChunks(query, this.getChunks(), {
+      ...options,
+      workspaceId: this.id,
+    })
   }
 
   cite(chunks: KnowledgeChunk[]): KnowledgeCitation[] {

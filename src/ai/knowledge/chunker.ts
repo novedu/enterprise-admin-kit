@@ -6,6 +6,12 @@ export interface ChunkDocumentOptions {
 }
 
 const DEFAULT_CHUNK_SIZE = 360
+const MIN_CHUNK_SIZE = 120
+const MAX_CHUNK_SIZE = 1_200
+
+export function normalizeChunkSize(chunkSize = DEFAULT_CHUNK_SIZE) {
+  return Math.min(MAX_CHUNK_SIZE, Math.max(MIN_CHUNK_SIZE, Math.round(chunkSize)))
+}
 
 function normalizeParagraphs(content: string) {
   return content
@@ -28,7 +34,7 @@ export function chunkDocument(
   document: KnowledgeDocument,
   options: ChunkDocumentOptions = {},
 ): KnowledgeChunk[] {
-  const chunkSize = options.chunkSize ?? DEFAULT_CHUNK_SIZE
+  const chunkSize = normalizeChunkSize(options.chunkSize)
   const rawChunks: string[] = []
   let buffer = ''
 
@@ -57,6 +63,7 @@ export function chunkDocument(
 
   return rawChunks.map((content, index) => ({
     id: `${document.id}-chunk-${index + 1}`,
+    workspaceId: document.workspaceId,
     docId: document.id,
     content,
     keywords: extractKeywords(content),

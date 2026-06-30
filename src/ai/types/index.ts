@@ -1,46 +1,36 @@
-export type ChatRole = 'system' | 'user' | 'assistant'
-
-export type ChatMessageStatus = 'idle' | 'loading' | 'streaming' | 'done' | 'error' | 'cancelled'
-
-export type ChatRuntimeStatus = ChatMessageStatus
+import type { ChatMessage } from './chatSnapshot'
+import type { KnowledgeBase } from '@/ai/knowledge'
+import type { PromptEngine } from '@/ai/prompt'
 
 export type AIProviderName = 'mock' | 'openai' | 'claude' | 'qwen' | 'deepseek'
 
 export type CompressionStrategy = 'none' | 'window' | 'summary' | 'hybrid'
 
-export interface TokenUsage {
-  promptTokens: number
-  completionTokens: number
-  totalTokens: number
+export type AIConfigVersion = 'v1'
+
+export type ProviderCostTier = 'mock' | 'low' | 'medium' | 'high'
+
+export type ProviderErrorCode =
+  | 'PROVIDER_UNSUPPORTED'
+  | 'PROVIDER_ABORTED'
+  | 'PROVIDER_TIMEOUT'
+  | 'PROVIDER_RATE_LIMITED'
+  | 'PROVIDER_AUTH_FAILED'
+  | 'PROVIDER_UNAVAILABLE'
+  | 'PROVIDER_UNKNOWN'
+
+export interface ProviderCapabilities {
+  streaming: boolean
+  maxTokens: number
+  contextLimit: number
+  costTier: ProviderCostTier
 }
 
-export interface Citation {
-  id: string
-  source: string
-  title: string
-  content: string
-  score?: number
-}
-
-export interface ChatMessage {
-  id: string
-  role: ChatRole
-  content: string
-  status: ChatMessageStatus
-  createdAt: number
-  updatedAt?: number
-  tokenUsage?: TokenUsage
-  citations?: Citation[]
-  metadata?: Record<string, unknown>
-}
-
-export interface Conversation {
-  id: string
-  title: string
-  messages: ChatMessage[]
-  createdAt: number
-  updatedAt: number
-  active: boolean
+export interface ProviderError extends Error {
+  code: ProviderErrorCode
+  retryable: boolean
+  provider?: string
+  cause?: unknown
 }
 
 export interface ChatRequest {
@@ -56,6 +46,10 @@ export interface ChatRequest {
   enableCache?: boolean
   contextWindow?: number
   compressionStrategy?: CompressionStrategy
+  knowledgeBase?: KnowledgeBase
+  promptEngine?: PromptEngine
+  promptTemplateId?: string
+  knowledgeTopK?: number
 }
 
 export interface StreamChunk {
@@ -76,6 +70,13 @@ export interface ProviderStreamCallbacks {
 export interface IProvider {
   name: string
   models: string[]
+  capabilities: ProviderCapabilities
+  streamPrompt?(
+    prompt: string,
+    request: ChatRequest,
+    callbacks: ProviderStreamCallbacks,
+    signal?: AbortSignal,
+  ): Promise<void>
   streamChat(
     request: ChatRequest,
     callbacks: ProviderStreamCallbacks,
@@ -92,20 +93,32 @@ export interface RuntimeEvent {
     | 'chat:finish'
     | 'chat:error'
     | 'chat:abort'
+    | 'chat:pipeline'
     | 'provider:change'
     | 'config:update'
   payload: unknown
   timestamp: number
 }
 
+export type PipelineStepName =
+  'context:before' | 'context:after' | 'knowledge:after' | 'prompt:after' | 'provider:before'
+
+export interface PipelineStepEvent {
+  traceId: string
+  timestamp: number
+  step: PipelineStepName
+  payload: Record<string, unknown>
+}
+
 export interface ProviderCredential {
-  apiKey: string
-  baseUrl: string
-  organizationId?: string
-  projectId?: string
+  id: string
+  name: string
+  type: AIProviderName
+  encryptedRef: string
 }
 
 export interface AIConfig {
+  version: AIConfigVersion
   provider: AIProviderName
   model: string
   providerCredentials: Partial<Record<AIProviderName, ProviderCredential>>
@@ -118,8 +131,24 @@ export interface AIConfig {
   contextWindow: number
   compressionStrategy: CompressionStrategy
   systemPrompt: string
+  knowledgeTopK: number
+  requestTimeoutMs: number
+  maxRetries: number
 }
 
 export type AIConfigPatch = Partial<AIConfig>
 
 export type AIConfigReader = () => AIConfig
+
+export type {
+  ChatMessage,
+  ChatMessageStatus,
+  ChatRole,
+  ChatRuntimeState,
+  ChatRuntimeStatus,
+  ChatSession,
+  ChatSnapshot,
+  Citation,
+  Conversation,
+  TokenUsage,
+} from './chatSnapshot'

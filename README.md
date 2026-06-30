@@ -55,7 +55,7 @@ The `/ai` module acts as a unified control plane for AI runtime configuration an
 It provides visibility and control over:
 
 - Model routing and multi-provider switching
-- Provider credentials and endpoint configuration
+- Provider credential references without exposing raw API keys
 - Prompt engineering with template preview
 - Knowledge retrieval through a mock RAG workspace
 - Runtime configuration for context, tokens and compression
@@ -82,10 +82,13 @@ This turns AI behavior from a code-driven feature into a configuration-driven ru
 - ChatRuntime orchestration engine
 - Event-driven runtime lifecycle with EventBus
 - Provider abstraction layer with MockProvider and OpenAI / Claude / Qwen / DeepSeek stub providers
+- Provider capabilities and normalized provider error contracts
 - Context Manager for token estimation and compression strategies
 - Prompt Engine with template registry and variable injection
 - Mock RAG Knowledge System with document chunks, keyword retrieval and citations
-- Observability layer with trace collection, event timeline, token monitor and latency tracker
+- Bounded Observability layer with trace collection, event timeline, token monitor and latency tracker
+- RuntimeGuard for state transition, timeout, retry, token and circuit-breaker protection
+- AI Config governance with schema validation, config diff preview and safe fallback
 - Streaming chat with stop, retry and clear behavior through the runtime bridge
 
 ### AI Admin Console (`/ai`)
@@ -99,15 +102,16 @@ This turns AI behavior from a code-driven feature into a configuration-driven ru
 
 #### Provider Credentials
 
-- Configure `API Key`
-- Configure provider `Base URL`
-- Store optional `Organization ID` and `Project ID`
-- Persist credentials per provider through the AI config store
+- Configure managed credential references
+- Store `ProviderCredential` as `{ id, name, type, encryptedRef }`
+- Prevent raw API keys from entering frontend runtime config
+- Persist only credential references per provider through the AI config store
 
 Credential note:
 
-- Credentials are currently stored in localStorage for demo and framework configuration previews.
-- Production systems should keep long-lived API keys in a backend vault or gateway layer.
+- Raw API keys are intentionally not stored in localStorage.
+- `encryptedRef` is a mock-safe reference for a backend vault or gateway-managed secret.
+- Production systems should resolve credentials server-side, never in ChatRuntime or UI code.
 
 #### Knowledge Base Manager
 
@@ -157,7 +161,78 @@ It tracks:
 - Latency metrics
 - Error and abort states
 
+Observability is bounded by design:
+
+- Max trace limit per session
+- Max event count per trace
+- Chunk sampling modes for `debug`, `normal` and `production`
+- Automatic trimming for old traces, latency metrics and token usage
+
 This makes the AI system inspectable without coupling debug logic into ChatRuntime or UI components.
+
+## Production Hardening
+
+The runtime has been hardened from an advanced demo architecture into a production-grade engineering blueprint.
+
+### Configuration Governance
+
+- Central `AIConfig` versioning with `v1`
+- Runtime config validation before apply
+- Provider, context, token, timeout and knowledge settings are constrained
+- Invalid config is rejected
+- Safe fallback config is used when persisted config is broken
+- Config diff preview is available before apply
+
+### Security Model
+
+- Frontend runtime stores credential references only
+- Raw `apiKey` / `baseUrl` credential shapes are detected and stripped during config migration
+- Provider credentials are represented as managed references:
+
+```ts
+type ProviderCredential = {
+  id: string
+  name: string
+  type: 'mock' | 'openai' | 'claude' | 'qwen' | 'deepseek'
+  encryptedRef: string
+}
+```
+
+### Runtime Safety
+
+- ChatRuntime state transitions are guarded by RuntimeGuard
+- Provider token and context limits are enforced before execution
+- Request timeout protection is applied to provider streaming
+- Retry count is limited by config
+- Provider failures are normalized and can trigger a mock circuit breaker
+
+### RAG Governance
+
+- Knowledge documents are scoped by workspace
+- Oversized documents are rejected
+- Chunk size is clamped to a safe range
+- Retrieval `topK` is capped
+- Retrieval score is bounded
+
+### Provider Hardening
+
+Providers expose a common capability contract:
+
+```ts
+type ProviderCapabilities = {
+  streaming: boolean
+  maxTokens: number
+  contextLimit: number
+  costTier: 'mock' | 'low' | 'medium' | 'high'
+}
+```
+
+Provider errors are normalized with:
+
+- Standard error code
+- Retryable flag
+- Provider name
+- Original cause
 
 ## Tech Stack
 
@@ -212,6 +287,14 @@ src
 ├── layouts
 ├── locales
 ├── pages
+│   ├── ai
+│   │   ├── index.vue
+│   │   ├── provider
+│   │   ├── knowledge
+│   │   ├── prompt
+│   │   ├── observability
+│   │   ├── settings
+│   │   └── shared
 ├── plugins
 ├── router
 ├── schemas
@@ -247,6 +330,10 @@ Prompt templates are managed by PromptEngine instead of being hardcoded inside C
 
 Every AI request can be traced, measured and inspected without changing runtime behavior.
 
+### 7. Safety by default
+
+Runtime configuration, provider execution, observability and RAG retrieval are bounded by explicit guardrails.
+
 ## Architecture Principles
 
 - UI layer is purely presentational
@@ -256,7 +343,9 @@ Every AI request can be traced, measured and inspected without changing runtime 
 - Prompt system is template-driven
 - Knowledge retrieval is standalone and runtime-ready
 - Observability is passive and non-intrusive
-- Configuration is centralized in AI Config Store
+- Observability memory usage is bounded
+- Configuration is centralized, validated and versioned in AI Config Store
+- Runtime safety guards prevent invalid state transitions and unsafe provider calls
 
 ## Validation
 
@@ -265,14 +354,29 @@ Recommended checks:
 ```bash
 npm run lint
 npm exec vue-tsc -- -b
+npm run test -- --run
 npm exec vite -- build --target esnext
 ```
 
 Targeted AI Console checks:
 
 ```bash
-npm exec eslint -- src/pages/ai/index.vue src/ai/types/index.ts src/ai/config/defaultConfig.ts src/store/modules/aiConfig.ts src/locales/en-US.ts src/locales/zh-CN.ts
+npm exec eslint -- src/pages/ai/index.vue src/pages/ai/provider/index.vue src/pages/ai/knowledge/index.vue src/pages/ai/prompt/index.vue src/pages/ai/observability/index.vue src/pages/ai/settings/index.vue src/pages/ai/shared/useAiControlPlane.ts src/router/index.ts src/router/routes.ts
 ```
+
+Phase 4 hardening checks:
+
+```bash
+npm exec vue-tsc -- -b
+npm run test -- --run
+npm exec vite -- build --target esnext
+```
+
+Current expected build warnings:
+
+- `mockjs` uses `eval` in its distributed browser mock bundle
+- Rollup may remove unsupported pure annotations from `@vueuse/core`
+- Monaco/editor chunks may exceed the default 500KB chunk warning threshold
 
 ## Interview Talking Points
 
@@ -284,6 +388,8 @@ npm exec eslint -- src/pages/ai/index.vue src/ai/types/index.ts src/ai/config/de
 - Why Observability is required for production AI systems
 - Why UI must be separated from the AI execution layer
 - Why Provider credentials belong to the AI Config Center instead of page-local state
+- Why frontend AI platforms should store credential references, not raw keys
+- Why production AI runtime needs config validation, bounded observability and runtime guardrails
 - Why an AI Control Plane is necessary for enterprise usage
 
 ## Roadmap
@@ -294,6 +400,7 @@ npm exec eslint -- src/pages/ai/index.vue src/ai/types/index.ts src/ai/config/de
 - Advanced RAG with vector database integration
 - Real OpenAI / Claude / Qwen / DeepSeek provider adapters
 - Backend-managed credential vault
+- Server-side provider gateway and credential resolver
 - Plugin marketplace for Provider / Prompt / Tool modules
 - Workflow orchestration through AI Flow Builder
 - Micro frontend shell

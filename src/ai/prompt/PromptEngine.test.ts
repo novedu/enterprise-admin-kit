@@ -63,6 +63,7 @@ describe('PromptEngine', () => {
       retrievedDocuments: [
         {
           id: 'chunk-1',
+          workspaceId: 'kb-1',
           docId: 'doc-1',
           content: 'Retrieval uses keyword overlap scoring.',
           keywords: ['retrieval', 'keyword'],

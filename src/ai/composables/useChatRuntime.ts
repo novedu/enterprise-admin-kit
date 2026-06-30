@@ -26,26 +26,16 @@ export function useChatRuntime() {
   const runtime = getChatRuntime()
 
   if (!eventsBound) {
-    runtimeEventBus.on('chat:start', ({ message, messages, status }) => {
-      store.startAssistantMessage(message, status, messages)
-    })
-    runtimeEventBus.on('chat:chunk', ({ messageId, fullText, status }) => {
-      store.appendAssistantChunk(messageId, fullText, status)
-    })
-    runtimeEventBus.on('chat:finish', ({ messageId, fullText, tokenUsage, status }) => {
-      store.finishAssistantMessage(messageId, fullText, tokenUsage, status)
-    })
-    runtimeEventBus.on('chat:error', ({ messageId, error, status }) => {
-      store.failAssistantMessage(messageId, error, status)
-    })
-    runtimeEventBus.on('chat:abort', ({ messageId, status }) => {
-      store.abortAssistantMessage(messageId, status)
+    runtimeEventBus.on('chat:snapshot', (snapshot) => {
+      store.setSnapshot(snapshot)
     })
     eventsBound = true
   }
 
+  store.setSnapshot(runtime.getSnapshot())
+
   const { messages, status } = storeToRefs(store)
-  const streaming = computed(() => store.isBusy)
+  const streaming = computed(() => store.streaming)
 
   return {
     messages,
@@ -55,9 +45,10 @@ export function useChatRuntime() {
       const text = prompt.trim()
       if (!text) return
       const userMessage = createUserMessage(text)
+      const snapshot = runtime.getSnapshot()
 
       const request: ChatRequest = {
-        conversationId: `conversation-${Date.now()}`,
+        conversationId: snapshot.activeSessionId,
         messages: runtime.getMessages().concat(userMessage),
         model: runtime.getDefaultModel(),
       }
@@ -68,7 +59,6 @@ export function useChatRuntime() {
     retry: () => runtime.retry(),
     clear: () => {
       runtime.clear()
-      store.clear()
     },
   }
 }

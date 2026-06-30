@@ -1,5 +1,7 @@
 import type { ChatRequest, IProvider, ProviderStreamCallbacks } from '@/ai/types'
 
+import { normalizeProviderError } from './errors'
+
 const replies = [
   `I can help you reason about this admin starter.\n\n\`\`\`ts\nconst layers = ['Route', 'Button', 'Field', 'Schema']\n\`\`\`\n\nThe key is keeping permission checks close to the UI surface while still deriving them from one backend contract.`,
   `A good TablePage abstraction owns pagination, loading, search and mutations.\n\nPages should provide schema and business API only. That keeps CRUD pages boring in the best possible way.`,
@@ -34,6 +36,12 @@ function createTokenChunks(text: string, maxTokens = 80) {
 export class MockProvider implements IProvider {
   name = 'mock'
   models = ['mock-chat-runtime']
+  capabilities = {
+    streaming: true,
+    maxTokens: 4096,
+    contextLimit: 16_384,
+    costTier: 'mock' as const,
+  }
 
   async streamChat(
     request: ChatRequest,
@@ -41,9 +49,19 @@ export class MockProvider implements IProvider {
     signal = new AbortController().signal,
   ) {
     const prompt = request.messages.at(-1)?.content || ''
+
+    return this.streamPrompt(prompt, request, callbacks, signal)
+  }
+
+  async streamPrompt(
+    prompt: string,
+    request: ChatRequest,
+    callbacks: ProviderStreamCallbacks,
+    signal = new AbortController().signal,
+  ) {
     const messageId = request.messages.at(-1)?.id || request.conversationId
     const seed = prompt.length % replies.length
-    const answer = replies[seed]
+    const answer = `${replies[seed]}\n\nRuntime pipeline received a final prompt with ${prompt.length} characters.`
     const chunks = createTokenChunks(answer, request.maxTokens)
     let fullText = ''
 
@@ -75,8 +93,9 @@ export class MockProvider implements IProvider {
       })
       callbacks.onFinish?.(fullText)
     } catch (error) {
-      callbacks.onError?.(error instanceof Error ? error : new Error(String(error)))
-      throw error
+      const normalizedError = normalizeProviderError(error, this.name)
+      callbacks.onError?.(normalizedError)
+      throw normalizedError
     }
   }
 }

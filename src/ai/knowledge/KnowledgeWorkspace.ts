@@ -5,6 +5,10 @@ export class KnowledgeWorkspace {
   private activeBaseId: string | null = null
 
   createKnowledgeBase(options: KnowledgeBaseOptions) {
+    if (this.bases.has(options.id)) {
+      throw new Error(`Knowledge base ${options.id} already exists.`)
+    }
+
     const base = new KnowledgeBase(options)
 
     this.bases.set(base.id, base)
@@ -46,6 +50,6 @@ export class KnowledgeWorkspace {
       }
     }
 
-    return base.query(query, { topK })
+    return base.query(query, { topK, workspaceId: base.id })
   }
 }

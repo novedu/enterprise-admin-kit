@@ -8,10 +8,11 @@ export class TraceCollector {
   constructor(
     private now: () => number = Date.now,
     private makeTraceId: () => string = createTraceId,
+    private maxTraces = 100,
   ) {}
 
   startTrace(payload: TraceEventPayload, metadata: RuntimeMetadata) {
-    const traceId = this.makeTraceId()
+    const traceId = payload.traceId || this.makeTraceId()
     const startTime = this.now()
     const trace: RuntimeTrace = {
       traceId,
@@ -24,6 +25,7 @@ export class TraceCollector {
     }
 
     this.traces.set(traceId, trace)
+    this.trimTraces()
 
     if (payload.messageId) {
       this.messageTraceMap.set(payload.messageId, traceId)
@@ -61,5 +63,23 @@ export class TraceCollector {
   clear() {
     this.traces.clear()
     this.messageTraceMap.clear()
+  }
+
+  getActiveTraceIds() {
+    return new Set(this.traces.keys())
+  }
+
+  private trimTraces() {
+    while (this.traces.size > this.maxTraces) {
+      const oldestTraceId = this.traces.keys().next().value as string | undefined
+      if (!oldestTraceId) return
+
+      this.traces.delete(oldestTraceId)
+      for (const [messageId, traceId] of this.messageTraceMap.entries()) {
+        if (traceId === oldestTraceId) {
+          this.messageTraceMap.delete(messageId)
+        }
+      }
+    }
   }
 }

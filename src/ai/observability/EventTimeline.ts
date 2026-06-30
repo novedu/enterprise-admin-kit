@@ -6,7 +6,10 @@ import { clonePayload } from './utils'
 export class EventTimeline {
   private events: TimelineEvent[] = []
 
-  constructor(private now: () => number = Date.now) {}
+  constructor(
+    private now: () => number = Date.now,
+    private maxEventsPerTrace = 120,
+  ) {}
 
   record<K extends ObservableEventName>(traceId: string, type: K, payload: RuntimeEventMap[K]) {
     const event: TimelineEvent<K> = {
@@ -17,6 +20,7 @@ export class EventTimeline {
     }
 
     this.events.push(event)
+    this.trimTraceEvents(traceId)
 
     return event
   }
@@ -32,5 +36,24 @@ export class EventTimeline {
 
   clear() {
     this.events = []
+  }
+
+  trimTraces(allowedTraceIds: Set<string>) {
+    this.events = this.events.filter((event) => allowedTraceIds.has(event.traceId))
+  }
+
+  private trimTraceEvents(traceId: string) {
+    const traceEvents = this.events.filter((event) => event.traceId === traceId)
+    if (traceEvents.length <= this.maxEventsPerTrace) return
+
+    const overflow = traceEvents.length - this.maxEventsPerTrace
+    let removed = 0
+
+    this.events = this.events.filter((event) => {
+      if (event.traceId !== traceId) return true
+      if (removed >= overflow) return true
+      removed += 1
+      return false
+    })
   }
 }

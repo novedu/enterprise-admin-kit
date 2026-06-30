@@ -61,6 +61,37 @@ describe('KnowledgeBase', () => {
     expect(citations[0].source).toBe('RAG Notes')
     expect(citations[0].score).toBeGreaterThan(0)
   })
+
+  it('rejects oversized documents and caps retrieval topK', () => {
+    const base = new KnowledgeBase({
+      id: 'kb-guarded',
+      name: 'Guarded KB',
+      maxDocumentChars: 20,
+    })
+
+    expect(() =>
+      base.uploadDocument({
+        title: 'Too Large',
+        content: 'This document is much too large for the configured knowledge base.',
+      }),
+    ).toThrow(/exceeds/)
+
+    const searchable = new KnowledgeBase({
+      id: 'kb-search',
+      name: 'Search KB',
+      chunkSize: 120,
+    })
+
+    for (let index = 0; index < 12; index += 1) {
+      searchable.uploadDocument({
+        title: `Runtime ${index}`,
+        content: `runtime provider streaming retrieval citation ${index}`,
+      })
+    }
+
+    expect(searchable.retrieve('runtime provider retrieval', { topK: 50 })).toHaveLength(10)
+    expect(searchable.getChunks()[0].workspaceId).toBe('kb-search')
+  })
 })
 
 describe('KnowledgeWorkspace', () => {

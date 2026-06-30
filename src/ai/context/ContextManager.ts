@@ -7,6 +7,15 @@ export interface ContextManagerConfig {
   compressionStrategy: CompressionStrategy
 }
 
+export interface ContextBuildResult {
+  messages: ChatMessage[]
+  tokenUsage: TokenUsage
+  compressed: boolean
+  strategy: CompressionStrategy
+  originalMessageCount: number
+  finalMessageCount: number
+}
+
 const DEFAULT_CONTEXT_CONFIG: ContextManagerConfig = {
   contextWindow: 8192,
   compressionStrategy: 'none',
@@ -67,7 +76,24 @@ export class ContextManager {
   constructor(private config: ContextManagerConfig = DEFAULT_CONTEXT_CONFIG) {}
 
   build(messages: ChatMessage[], config = this.config) {
-    return this.getContext(messages, config)
+    return this.buildResult(messages, config).messages
+  }
+
+  buildResult(messages: ChatMessage[], config = this.config): ContextBuildResult {
+    const resolvedConfig = normalizeConfig(config)
+    const context = this.getContext(messages, resolvedConfig)
+
+    return {
+      messages: context,
+      tokenUsage: this.getTokenUsage(context),
+      compressed:
+        resolvedConfig.compressionStrategy !== 'none' &&
+        (context.length !== messages.length ||
+          this.getTokenUsage(messages).totalTokens > resolvedConfig.contextWindow),
+      strategy: resolvedConfig.compressionStrategy,
+      originalMessageCount: messages.length,
+      finalMessageCount: context.length,
+    }
   }
 
   getContext(messages: ChatMessage[], config = this.config) {

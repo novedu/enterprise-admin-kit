@@ -31,4 +31,12 @@ export class TokenMonitor {
   clear() {
     this.usageByTrace.clear()
   }
+
+  trimTraces(allowedTraceIds: Set<string>) {
+    for (const traceId of this.usageByTrace.keys()) {
+      if (!allowedTraceIds.has(traceId)) {
+        this.usageByTrace.delete(traceId)
+      }
+    }
+  }
 }

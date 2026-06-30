@@ -49,11 +49,59 @@ export const asyncChildren: RouteRecordRaw[] = [
     path: 'ai',
     name: 'AI',
     component: () => import('@/pages/ai/index.vue'),
+    redirect: '/ai/provider',
     meta: {
       title: 'AI Admin Console',
       titleKey: 'menu.ai',
       icon: 'ChatDotRound',
     },
+    children: [
+      {
+        path: 'provider',
+        name: 'AIProvider',
+        component: () => import('@/pages/ai/provider/index.vue'),
+        meta: {
+          title: 'Provider Center',
+          titleKey: 'page.ai.tabs.provider',
+        },
+      },
+      {
+        path: 'knowledge',
+        name: 'AIKnowledge',
+        component: () => import('@/pages/ai/knowledge/index.vue'),
+        meta: {
+          title: 'Knowledge Base',
+          titleKey: 'page.ai.tabs.knowledge',
+        },
+      },
+      {
+        path: 'prompt',
+        name: 'AIPrompt',
+        component: () => import('@/pages/ai/prompt/index.vue'),
+        meta: {
+          title: 'Prompt Studio',
+          titleKey: 'page.ai.tabs.prompt',
+        },
+      },
+      {
+        path: 'observability',
+        name: 'AIObservability',
+        component: () => import('@/pages/ai/observability/index.vue'),
+        meta: {
+          title: 'Observability',
+          titleKey: 'page.ai.tabs.observability',
+        },
+      },
+      {
+        path: 'settings',
+        name: 'AISettings',
+        component: () => import('@/pages/ai/settings/index.vue'),
+        meta: {
+          title: 'Settings Center',
+          titleKey: 'page.ai.tabs.settings',
+        },
+      },
+    ],
   },
   {
     path: 'schema-editor',

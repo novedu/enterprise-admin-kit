@@ -63,6 +63,9 @@ router.beforeEach((to) => {
   if (
     to.name &&
     !auth.permissions.routes.includes(String(to.name)) &&
+    !to.matched.some(
+      (record) => record.name && auth.permissions.routes.includes(String(record.name)),
+    ) &&
     to.name !== 'Root' &&
     to.name !== 'NotFound'
   ) {

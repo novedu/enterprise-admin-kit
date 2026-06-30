@@ -28,9 +28,11 @@ function bindRuntimeEvents() {
   if (eventsBound) return
 
   runtimeEventBus.on('config:update', ({ key }) => {
-    if (key !== 'provider') return
+    if (key === 'provider') {
+      syncProvider()
+    }
 
-    syncProvider()
+    runtime?.refreshGuards()
   })
   eventsBound = true
 }

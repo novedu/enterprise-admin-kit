@@ -59,6 +59,14 @@ export class LatencyTracker {
     this.metrics.clear()
   }
 
+  trimTraces(allowedTraceIds: Set<string>) {
+    for (const traceId of this.metrics.keys()) {
+      if (!allowedTraceIds.has(traceId)) {
+        this.metrics.delete(traceId)
+      }
+    }
+  }
+
   private calculateChunkRate(metrics: LatencyMetrics) {
     const durationMs = metrics.streamingDuration ?? 0
     if (durationMs <= 0) return metrics.chunkCount

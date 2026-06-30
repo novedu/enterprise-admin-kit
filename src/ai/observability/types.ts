@@ -2,9 +2,11 @@ import type { RuntimeEventMap } from '@/ai/events/events'
 import type { ChatMessageStatus, TokenUsage } from '@/ai/types'
 
 export type ObservableEventName =
-  'chat:start' | 'chat:chunk' | 'chat:finish' | 'chat:error' | 'chat:abort'
+  'chat:start' | 'chat:chunk' | 'chat:finish' | 'chat:error' | 'chat:abort' | 'chat:pipeline'
 
 export type TraceStatus = 'running' | 'done' | 'error' | 'cancelled'
+
+export type ObservabilitySamplingMode = 'debug' | 'normal' | 'production'
 
 export interface RuntimeMetadata {
   provider: string
@@ -60,9 +62,13 @@ export interface ObservabilityOptions {
   now?: () => number
   metadataResolver?: () => Partial<RuntimeMetadata>
   createTraceId?: () => string
+  maxTraces?: number
+  maxEventsPerTrace?: number
+  samplingMode?: ObservabilitySamplingMode
 }
 
 export interface TraceEventPayload {
+  traceId?: string
   messageId?: string
   conversationId?: string
   status?: ChatMessageStatus

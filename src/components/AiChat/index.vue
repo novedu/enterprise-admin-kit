@@ -83,6 +83,10 @@
 </template>
 
 <script setup lang="ts">
+defineOptions({
+  name: 'AiChat',
+})
+
 import { CircleClose, Promotion, RefreshRight } from '@element-plus/icons-vue'
 import hljs from 'highlight.js'
 import MarkdownIt from 'markdown-it'

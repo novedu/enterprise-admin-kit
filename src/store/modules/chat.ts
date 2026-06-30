@@ -1,11 +1,10 @@
 import { defineStore } from 'pinia'
 
-import type { ChatMessage, ChatRuntimeStatus, TokenUsage } from '@/ai/types'
+import type { ChatMessage, ChatRuntimeStatus, ChatSnapshot } from '@/ai/types'
 import { i18n } from '@/locales'
 
 interface ChatState {
-  messages: ChatMessage[]
-  status: ChatRuntimeStatus
+  snapshot: ChatSnapshot | null
 }
 
 function createId() {
@@ -28,75 +27,27 @@ function createInitialMessage(): ChatMessage {
 
 export const useChatStore = defineStore('chat', {
   state: (): ChatState => ({
-    messages: [createInitialMessage()],
-    status: 'idle',
+    snapshot: null,
   }),
   getters: {
-    isBusy: (state) => state.status === 'loading' || state.status === 'streaming',
+    messages: (state): ChatMessage[] => state.snapshot?.messages ?? [createInitialMessage()],
+    status: (state): ChatRuntimeStatus => state.snapshot?.status ?? 'idle',
+    streaming: (state): boolean => state.snapshot?.streaming ?? false,
+    activeSessionId: (state): string => state.snapshot?.activeSessionId ?? '',
+    isBusy: (state): boolean => state.snapshot?.streaming ?? false,
   },
   actions: {
-    setRuntimeMessages(messages: ChatMessage[]) {
-      this.messages = messages.length ? messages : [createInitialMessage()]
-    },
-    setStatus(status: ChatRuntimeStatus) {
-      this.status = status
-    },
-    startAssistantMessage(
-      message: ChatMessage,
-      status: ChatRuntimeStatus,
-      messages?: ChatMessage[],
-    ) {
-      if (messages?.length) {
-        this.messages = messages
-      } else {
-        this.messages.push(message)
+    setSnapshot(snapshot: ChatSnapshot) {
+      this.snapshot = {
+        ...snapshot,
+        messages: snapshot.messages.map((message) => ({
+          ...message,
+          tokenUsage: message.tokenUsage ? { ...message.tokenUsage } : undefined,
+          citations: message.citations?.map((citation) => ({ ...citation })),
+          metadata: message.metadata ? { ...message.metadata } : undefined,
+        })),
+        sessions: snapshot.sessions.map((session) => ({ ...session })),
       }
-      this.status = status
-    },
-    appendAssistantChunk(messageId: string, fullText: string, status: ChatRuntimeStatus) {
-      const message = this.messages.find((item) => item.id === messageId)
-      if (!message) return
-
-      message.content = fullText
-      message.status = status
-      message.updatedAt = now()
-      this.status = status
-    },
-    finishAssistantMessage(
-      messageId: string,
-      fullText: string,
-      tokenUsage: TokenUsage,
-      status: ChatRuntimeStatus,
-    ) {
-      const message = this.messages.find((item) => item.id === messageId)
-      if (!message) return
-
-      message.content = fullText
-      message.status = status
-      message.tokenUsage = tokenUsage
-      message.updatedAt = now()
-      this.status = status
-    },
-    failAssistantMessage(messageId: string, error: string, status: ChatRuntimeStatus) {
-      const message = this.messages.find((item) => item.id === messageId)
-      if (!message) return
-
-      message.status = status
-      message.metadata = { ...message.metadata, error }
-      message.updatedAt = now()
-      this.status = status
-    },
-    abortAssistantMessage(messageId: string, status: ChatRuntimeStatus) {
-      const message = this.messages.find((item) => item.id === messageId)
-      if (!message) return
-
-      message.status = status
-      message.updatedAt = now()
-      this.status = status
-    },
-    clear() {
-      this.messages = [createInitialMessage()]
-      this.status = 'idle'
     },
   },
 })

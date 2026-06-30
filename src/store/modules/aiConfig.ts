@@ -1,6 +1,12 @@
 import { defineStore } from 'pinia'
 
 import { DEFAULT_AI_CONFIG } from '@/ai/config/defaultConfig'
+import {
+  createConfigDiff,
+  createCredentialRef,
+  mergeAndValidateAIConfig,
+  validateAIConfig,
+} from '@/ai/config/validator'
 import { runtimeEventBus } from '@/ai/events/runtimeBus'
 import type { AIConfig, AIConfigPatch, AIProviderName, ProviderCredential } from '@/ai/types'
 
@@ -13,10 +19,7 @@ function readPersistedConfig(): AIConfig {
     const raw = window.localStorage.getItem(STORAGE_KEY)
     if (!raw) return { ...DEFAULT_AI_CONFIG }
 
-    return {
-      ...DEFAULT_AI_CONFIG,
-      ...(JSON.parse(raw) as AIConfigPatch),
-    }
+    return validateAIConfig(JSON.parse(raw)).config
   } catch {
     return { ...DEFAULT_AI_CONFIG }
   }
@@ -34,68 +37,75 @@ export const useAiConfigStore = defineStore('aiConfig', {
     currentConfig: (state): AIConfig => ({ ...state }),
     isStreamingEnabled: (state) => state.stream,
     currentProvider: (state) => state.provider,
-    currentProviderCredential: (state): ProviderCredential => ({
-      apiKey: '',
-      baseUrl: '',
-      ...state.providerCredentials[state.provider],
-    }),
+    currentProviderCredential: (state): ProviderCredential | undefined =>
+      state.providerCredentials[state.provider],
   },
   actions: {
     updateConfig(partial: AIConfigPatch) {
-      this.$patch(partial)
+      const result = mergeAndValidateAIConfig(this.currentConfig, partial)
+      if (!result.valid) {
+        throw new Error(result.errors.join('\n'))
+      }
+
+      const previous = this.currentConfig
+      this.$patch(result.config)
       persistConfig(this.currentConfig)
-      emitConfigUpdates(partial)
+      emitConfigUpdatesFromDiff(previous, this.currentConfig)
     },
     setProvider(provider: AIProviderName) {
-      this.provider = provider
+      this.updateConfig({ provider })
       persistConfig(this.currentConfig)
       runtimeEventBus.emit('provider:change', {
         provider,
         model: this.model,
       })
-      emitConfigUpdates({ provider })
     },
     setModel(model: string) {
-      this.model = model
+      this.updateConfig({ model })
       persistConfig(this.currentConfig)
       runtimeEventBus.emit('provider:change', {
         provider: this.provider,
         model,
       })
-      emitConfigUpdates({ model })
     },
-    updateProviderCredential(provider: AIProviderName, partial: Partial<ProviderCredential>) {
+    updateProviderCredential(
+      provider: AIProviderName,
+      input: Pick<ProviderCredential, 'name' | 'encryptedRef'>,
+    ) {
+      const credential = createCredentialRef(
+        provider,
+        input.name.trim() || `${provider} credential`,
+        input.encryptedRef.trim(),
+      )
       const nextCredentials = {
         ...this.providerCredentials,
-        [provider]: {
-          apiKey: '',
-          baseUrl: '',
-          ...this.providerCredentials[provider],
-          ...partial,
-        },
+        [provider]: credential,
       }
-      this.providerCredentials = nextCredentials
-      persistConfig(this.currentConfig)
-      emitConfigUpdates({ providerCredentials: nextCredentials })
+      this.updateConfig({ providerCredentials: nextCredentials })
     },
     clearProviderCredential(provider: AIProviderName) {
-      this.updateProviderCredential(provider, {
-        apiKey: '',
-        baseUrl: '',
-        organizationId: '',
-        projectId: '',
-      })
+      const nextCredentials = { ...this.providerCredentials }
+      delete nextCredentials[provider]
+      this.updateConfig({ providerCredentials: nextCredentials })
+    },
+    previewConfigDiff(partial: AIConfigPatch) {
+      const result = mergeAndValidateAIConfig(this.currentConfig, partial)
+      return {
+        ...result,
+        diff: createConfigDiff(this.currentConfig, result.config),
+      }
     },
     resetConfig() {
+      const previous = this.currentConfig
       this.$patch({ ...DEFAULT_AI_CONFIG })
       persistConfig(this.currentConfig)
-      emitConfigUpdates(DEFAULT_AI_CONFIG)
+      emitConfigUpdatesFromDiff(previous, this.currentConfig)
     },
   },
 })
 
-function emitConfigUpdates(partial: AIConfigPatch) {
-  for (const [key, value] of Object.entries(partial)) {
-    runtimeEventBus.emit('config:update', { key, value })
+function emitConfigUpdatesFromDiff(previous: AIConfig, next: AIConfig) {
+  for (const { key, after } of createConfigDiff(previous, next)) {
+    runtimeEventBus.emit('config:update', { key, value: after })
   }
 }

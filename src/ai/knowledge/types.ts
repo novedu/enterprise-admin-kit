@@ -1,5 +1,6 @@
 export interface KnowledgeDocument {
   id: string
+  workspaceId: string
   title: string
   content: string
   createdAt: number
@@ -7,6 +8,7 @@ export interface KnowledgeDocument {
 
 export interface KnowledgeChunk {
   id: string
+  workspaceId: string
   docId: string
   content: string
   keywords: string[]
@@ -27,4 +29,5 @@ export interface UploadDocumentInput {
 
 export interface RetrieveOptions {
   topK?: number
+  workspaceId?: string
 }
