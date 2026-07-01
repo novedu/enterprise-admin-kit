@@ -38,6 +38,8 @@
           >
             <strong>{{ item.title }}</strong>
             <span>{{ item.messageCount }} messages</span>
+            <span>{{ item.metadata.tokenTotal }} tokens</span>
+            <span>{{ item.metadata.traceIds.length }} traces</span>
             <small>{{ new Date(item.lastMessageAt).toLocaleString() }}</small>
           </button>
           <el-empty
@@ -72,6 +74,17 @@
             <span class="message-role">{{ message.role }}</span>
             <div class="message-bubble">
               <p>{{ message.content }}</p>
+              <div class="message-meta">
+                <el-tag v-if="message.tokenUsage" size="small" effect="plain">
+                  {{ message.tokenUsage.totalTokens }} tokens
+                </el-tag>
+                <el-tag v-if="message.metadata?.traceId" size="small" effect="plain">
+                  trace {{ String(message.metadata.traceId).slice(0, 18) }}
+                </el-tag>
+                <el-tag v-if="message.status !== 'done'" size="small" type="warning">
+                  {{ message.status }}
+                </el-tag>
+              </div>
               <div v-if="message.citations?.length" class="citation-list">
                 <el-tag v-for="citation in message.citations" :key="citation.id" size="small">
                   {{ citation.title }}
@@ -292,6 +305,13 @@ watch(messages, scrollToBottom, { deep: true })
 }
 
 .citation-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.message-meta {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;

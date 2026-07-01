@@ -151,7 +151,15 @@ export class ConversationRepository {
     return cloneConversation(conversation)
   }
 
-  async touch(id: string, patch: Partial<Pick<ConversationSnapshot, 'title' | 'messageCount'>>) {
+  async touch(
+    id: string,
+    patch: Partial<
+      Pick<ConversationSnapshot, 'title' | 'messageCount'> & {
+        tokenTotal: number
+        traceIds: string[]
+      }
+    >,
+  ) {
     const conversations = readConversations()
     let updated: ConversationSnapshot | null = null
     const nextConversations = conversations.map((conversation) => {
@@ -159,8 +167,14 @@ export class ConversationRepository {
 
       updated = {
         ...conversation,
-        ...patch,
+        ...('title' in patch ? { title: patch.title } : {}),
+        ...('messageCount' in patch ? { messageCount: patch.messageCount } : {}),
         lastMessageAt: Date.now(),
+        metadata: {
+          ...conversation.metadata,
+          tokenTotal: patch.tokenTotal ?? conversation.metadata.tokenTotal,
+          traceIds: patch.traceIds ?? conversation.metadata.traceIds,
+        },
       }
 
       return updated

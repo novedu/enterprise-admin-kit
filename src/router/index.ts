@@ -5,6 +5,13 @@ import { useAuthStore } from '@/store'
 import { asyncChildren, constantRoutes, notFoundRoute, rootRoute } from './routes'
 
 const dynamicRouteNames = new Set<string>()
+const platformRouteNames = new Set([
+  'Workspaces',
+  'WorkspaceDetail',
+  'Applications',
+  'ApplicationDetail',
+  'Conversations',
+])
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -14,7 +21,10 @@ const router = createRouter({
 export function setupDynamicRoutes(routeNames: string[]) {
   const allowed = asyncChildren.filter((route) => {
     if (route.redirect) return true
-    return route.name && routeNames.includes(String(route.name))
+    return (
+      route.name &&
+      (routeNames.includes(String(route.name)) || platformRouteNames.has(String(route.name)))
+    )
   })
 
   allowed.forEach((route) => {
@@ -66,13 +76,7 @@ router.beforeEach((to) => {
     !to.matched.some(
       (record) => record.name && auth.permissions.routes.includes(String(record.name)),
     ) &&
-    ![
-      'Workspaces',
-      'WorkspaceDetail',
-      'Applications',
-      'ApplicationDetail',
-      'Conversations',
-    ].includes(String(to.name)) &&
+    !platformRouteNames.has(String(to.name)) &&
     to.name !== 'Root' &&
     to.name !== 'NotFound'
   ) {

@@ -10,7 +10,21 @@ const names = [
 ]
 
 export const adminPermissions = {
-  routes: ['Dashboard', 'User', 'Role', 'AI', 'SchemaEditor', 'Monitor', 'Setting', 'Profile'],
+  routes: [
+    'Dashboard',
+    'Workspaces',
+    'WorkspaceDetail',
+    'Applications',
+    'ApplicationDetail',
+    'Conversations',
+    'User',
+    'Role',
+    'AI',
+    'SchemaEditor',
+    'Monitor',
+    'Setting',
+    'Profile',
+  ],
   buttons: [
     'user:create',
     'user:edit',
@@ -25,13 +39,28 @@ export const adminPermissions = {
 }
 
 export const userPermissions = {
-  routes: ['Dashboard', 'AI', 'Profile'],
+  routes: [
+    'Dashboard',
+    'Workspaces',
+    'WorkspaceDetail',
+    'Applications',
+    'ApplicationDetail',
+    'Conversations',
+    'AI',
+    'Profile',
+  ],
   buttons: [],
   fields: [],
 }
 
 export const adminMenu = [
-  { path: '/dashboard', name: 'Dashboard', title: 'Dashboard', titleKey: 'menu.dashboard', icon: 'DataLine' },
+  {
+    path: '/dashboard',
+    name: 'Dashboard',
+    title: 'Dashboard',
+    titleKey: 'menu.dashboard',
+    icon: 'DataLine',
+  },
   { path: '/user', name: 'User', title: 'User Management', titleKey: 'menu.user', icon: 'User' },
   { path: '/role', name: 'Role', title: 'Role Management', titleKey: 'menu.role', icon: 'Lock' },
   { path: '/ai', name: 'AI', title: 'AI Chat', titleKey: 'menu.ai', icon: 'ChatDotRound' },
@@ -42,12 +71,30 @@ export const adminMenu = [
     titleKey: 'menu.schemaEditor',
     icon: 'Document',
   },
-  { path: '/monitor', name: 'Monitor', title: 'Monitor', titleKey: 'menu.monitor', icon: 'Monitor' },
-  { path: '/setting', name: 'Setting', title: 'Settings', titleKey: 'menu.setting', icon: 'Setting' },
+  {
+    path: '/monitor',
+    name: 'Monitor',
+    title: 'Monitor',
+    titleKey: 'menu.monitor',
+    icon: 'Monitor',
+  },
+  {
+    path: '/setting',
+    name: 'Setting',
+    title: 'Settings',
+    titleKey: 'menu.setting',
+    icon: 'Setting',
+  },
 ]
 
 export const userMenu = [
-  { path: '/dashboard', name: 'Dashboard', title: 'Dashboard', titleKey: 'menu.dashboard', icon: 'DataLine' },
+  {
+    path: '/dashboard',
+    name: 'Dashboard',
+    title: 'Dashboard',
+    titleKey: 'menu.dashboard',
+    icon: 'DataLine',
+  },
   { path: '/ai', name: 'AI', title: 'AI Chat', titleKey: 'menu.ai', icon: 'ChatDotRound' },
   { path: '/profile', name: 'Profile', title: 'Profile', titleKey: 'menu.profile', icon: 'Avatar' },
 ]
@@ -75,7 +122,13 @@ export const userSchema = {
     },
   ],
   form: [
-    { field: 'name', label: 'Name', labelKey: 'schema.user.name', component: 'Input', required: true },
+    {
+      field: 'name',
+      label: 'Name',
+      labelKey: 'schema.user.name',
+      component: 'Input',
+      required: true,
+    },
     {
       field: 'email',
       label: 'Email',
@@ -117,8 +170,20 @@ export const userSchema = {
   ],
   columns: [
     { prop: 'name', label: 'Name', labelKey: 'schema.user.name', minWidth: 140 },
-    { prop: 'email', label: 'Email', labelKey: 'schema.user.email', minWidth: 190, permission: 'field:user:email' },
-    { prop: 'phone', label: 'Phone', labelKey: 'schema.user.phone', minWidth: 140, permission: 'field:user:phone' },
+    {
+      prop: 'email',
+      label: 'Email',
+      labelKey: 'schema.user.email',
+      minWidth: 190,
+      permission: 'field:user:email',
+    },
+    {
+      prop: 'phone',
+      label: 'Phone',
+      labelKey: 'schema.user.phone',
+      minWidth: 140,
+      permission: 'field:user:phone',
+    },
     { prop: 'role', label: 'Role', labelKey: 'schema.user.role', width: 110 },
     { prop: 'status', label: 'Status', labelKey: 'schema.user.status', width: 110 },
     { prop: 'joinDate', label: 'Join Date', labelKey: 'schema.user.joinDate', width: 140 },
@@ -138,8 +203,20 @@ export const roleSchema = {
     },
   ],
   form: [
-    { field: 'name', label: 'Role Name', labelKey: 'schema.role.roleName', component: 'Input', required: true },
-    { field: 'code', label: 'Code', labelKey: 'schema.role.code', component: 'Input', required: true },
+    {
+      field: 'name',
+      label: 'Role Name',
+      labelKey: 'schema.role.roleName',
+      component: 'Input',
+      required: true,
+    },
+    {
+      field: 'code',
+      label: 'Code',
+      labelKey: 'schema.role.code',
+      component: 'Input',
+      required: true,
+    },
     {
       field: 'scope',
       label: 'Data Scope',

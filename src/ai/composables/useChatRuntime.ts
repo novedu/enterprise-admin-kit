@@ -3,7 +3,7 @@ import { computed, watch } from 'vue'
 
 import { runtimeEventBus } from '@/ai/events/runtimeBus'
 import { getApplicationRuntimeBinding } from '@/ai/runtime/applicationRuntime'
-import type { ChatMessage, ChatRequest } from '@/ai/types'
+import type { ChatMessage, ChatRequest, ChatSnapshot } from '@/ai/types'
 import {
   useApplicationStore,
   useChatStore,
@@ -13,6 +13,7 @@ import {
 } from '@/store'
 
 let eventsBound = false
+let persistTimer: number | null = null
 
 function createUserMessage(content: string): ChatMessage {
   const timestamp = Date.now()
@@ -54,11 +55,39 @@ export function useChatRuntime() {
     )
   }
 
+  async function persistSnapshot(snapshot: ChatSnapshot) {
+    const currentConversation = conversation.currentConversation
+    const currentWorkspace = workspace.currentWorkspace
+    const currentApplication = application.currentApplication
+    if (!currentConversation || !currentWorkspace || !currentApplication) return
+    if (snapshot.activeSessionId !== currentConversation.id) return
+
+    await conversation.saveConversationMessages({
+      workspaceId: currentWorkspace.id,
+      applicationId: currentApplication.id,
+      conversationId: currentConversation.id,
+      messages: snapshot.messages,
+    })
+  }
+
+  function schedulePersistSnapshot(snapshot: ChatSnapshot) {
+    if (typeof window === 'undefined') return
+    if (persistTimer) {
+      window.clearTimeout(persistTimer)
+    }
+
+    persistTimer = window.setTimeout(() => {
+      persistSnapshot(snapshot)
+      persistTimer = null
+    }, 120)
+  }
+
   if (!eventsBound) {
     runtimeEventBus.on('chat:snapshot', (snapshot) => {
       if (snapshot.scope?.runtimeId !== getCurrentBinding().runtimeId) return
 
       store.setSnapshot(snapshot)
+      schedulePersistSnapshot(snapshot)
     })
     eventsBound = true
   }
@@ -97,7 +126,8 @@ export function useChatRuntime() {
       await ensureConversations()
       const activeConversationId = conversation.currentConversation?.id
       if (activeConversationId) {
-        getCurrentBinding().runtime.openConversation(activeConversationId)
+        const messages = await conversation.loadMessages(activeConversationId)
+        getCurrentBinding().runtime.openConversation(activeConversationId, messages)
       }
       syncCurrentSnapshot()
     },
@@ -106,10 +136,11 @@ export function useChatRuntime() {
 
   watch(
     () => conversation.currentConversation?.id,
-    (conversationId) => {
+    async (conversationId) => {
       if (!conversationId) return
 
-      getCurrentBinding().runtime.openConversation(conversationId)
+      const messages = await conversation.loadMessages(conversationId)
+      getCurrentBinding().runtime.openConversation(conversationId, messages)
       syncCurrentSnapshot()
     },
   )
@@ -127,7 +158,8 @@ export function useChatRuntime() {
       const activeConversation = await ensureCurrentConversation(text.slice(0, 48))
       const runtime = getCurrentBinding().runtime
       if (activeConversation && runtime.getSnapshot().activeSessionId !== activeConversation.id) {
-        runtime.openConversation(activeConversation.id)
+        const messages = await conversation.loadMessages(activeConversation.id)
+        runtime.openConversation(activeConversation.id, messages)
       }
       const userMessage = createUserMessage(text)
       const snapshot = runtime.getSnapshot()
@@ -150,8 +182,23 @@ export function useChatRuntime() {
     },
     stop: () => getCurrentBinding().runtime.stop(),
     retry: () => getCurrentBinding().runtime.retry(),
-    clear: () => {
-      getCurrentBinding().runtime.clear()
+    clear: async () => {
+      const currentConversation = conversation.currentConversation
+      const currentWorkspace = workspace.currentWorkspace
+      const currentApplication = application.currentApplication
+      const runtime = getCurrentBinding().runtime
+      if (!currentConversation || !currentWorkspace || !currentApplication) {
+        runtime.clear()
+        return
+      }
+
+      runtime.openConversation(currentConversation.id, [])
+      await conversation.saveConversationMessages({
+        workspaceId: currentWorkspace.id,
+        applicationId: currentApplication.id,
+        conversationId: currentConversation.id,
+        messages: [],
+      })
     },
   }
 }
