@@ -21,7 +21,7 @@
           />
         </el-form-item>
         <el-form-item :label="t('page.ai.provider.model')">
-          <el-select v-model="modelDraft" filterable @change="aiConfig.setModel(modelDraft)">
+          <el-select v-model="modelDraft" filterable @change="handleModelChange">
             <el-option
               v-for="model in currentModelOptions"
               :key="model"
@@ -37,7 +37,7 @@
               :min="0"
               :max="2"
               :step="0.1"
-              @change="aiConfig.updateConfig({ temperature: temperatureDraft })"
+              @change="updateGenerationConfig({ temperature: temperatureDraft })"
             />
           </el-form-item>
           <el-form-item :label="t('page.ai.provider.topP')">
@@ -46,7 +46,7 @@
               :min="0"
               :max="1"
               :step="0.05"
-              @change="aiConfig.updateConfig({ topP: topPDraft })"
+              @change="updateGenerationConfig({ topP: topPDraft })"
             />
           </el-form-item>
         </div>
@@ -56,7 +56,7 @@
             :min="128"
             :max="32768"
             :step="128"
-            @change="aiConfig.updateConfig({ maxTokens: maxTokensDraft })"
+            @change="updateGenerationConfig({ maxTokens: maxTokensDraft })"
           />
         </el-form-item>
       </el-form>
@@ -158,6 +158,8 @@ const {
   credentialStatus,
   scopeLabel,
   handleProviderChange,
+  handleModelChange,
+  updateGenerationConfig,
   saveProviderCredential,
   clearProviderCredential,
 } = useProviderCenter()

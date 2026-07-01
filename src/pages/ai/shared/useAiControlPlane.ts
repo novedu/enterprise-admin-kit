@@ -1,4 +1,4 @@
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import type { Ref } from 'vue'
 
 import { useChatRuntime } from '@/ai/composables/useChatRuntime'
@@ -10,7 +10,12 @@ import type { RuntimeInspectionSnapshot, TraceStatus } from '@/ai/observability'
 import { PromptEngine } from '@/ai/prompt'
 import type { PromptTemplate } from '@/ai/prompt'
 import type { AIConfigPatch, AIProviderName, CompressionStrategy } from '@/ai/types'
-import { useAiConfigStore, useApplicationStore, useWorkspaceStore } from '@/store'
+import {
+  useAiConfigStore,
+  useApplicationStore,
+  useRuntimeProfileStore,
+  useWorkspaceStore,
+} from '@/store'
 
 import { useAiScope } from './useAiScope'
 
@@ -24,9 +29,10 @@ export const providerModels: Record<AIProviderName, string[]> = {
 
 const inspector = new RuntimeInspector(runtimeEventBus, {
   metadataResolver: () => {
-    const config = useAiConfigStore()
+    const runtimeProfile = useRuntimeProfileStore()
     const workspace = useWorkspaceStore()
     const application = useApplicationStore()
+    const config = runtimeProfile.getResolvedConfig(application.currentApplication?.id)
 
     return {
       provider: config.provider,
@@ -175,51 +181,124 @@ function createWritableScopedRef<T>(getValue: () => Ref<T>) {
   })
 }
 
+function useScopedRuntimeConfig(aiScope = useAiScope()) {
+  const globalConfig = useAiConfigStore()
+  const runtimeProfile = useRuntimeProfileStore()
+  const applicationId = computed(() => aiScope.applicationId.value)
+  const runtimeConfig = computed(() => runtimeProfile.getResolvedConfig(applicationId.value))
+  const currentProviderCredential = computed(
+    () => runtimeConfig.value.providerCredentials[runtimeConfig.value.provider],
+  )
+
+  function updateRuntimeConfig(patch: AIConfigPatch) {
+    if (applicationId.value) {
+      runtimeProfile.updateProfile(applicationId.value, patch)
+      return
+    }
+
+    globalConfig.updateConfig(patch)
+  }
+
+  function resetRuntimeConfig() {
+    if (applicationId.value) {
+      runtimeProfile.resetProfile(applicationId.value)
+      return
+    }
+
+    globalConfig.resetConfig()
+  }
+
+  return {
+    globalConfig,
+    runtimeProfile,
+    applicationId,
+    runtimeConfig,
+    currentProviderCredential,
+    updateRuntimeConfig,
+    resetRuntimeConfig,
+  }
+}
+
 export function useProviderCenter() {
   const aiScope = useAiScope()
   onMounted(aiScope.ensureAiScope)
-  const aiConfig = useAiConfigStore()
+  const { runtimeConfig, currentProviderCredential, updateRuntimeConfig } =
+    useScopedRuntimeConfig(aiScope)
   const { status: chatStatus, streaming, sendMessage } = useChatRuntime()
-  const providerDraft = ref<AIProviderName>(aiConfig.provider)
-  const modelDraft = ref(aiConfig.model)
-  const temperatureDraft = ref(aiConfig.temperature)
-  const topPDraft = ref(aiConfig.topP)
-  const maxTokensDraft = ref(aiConfig.maxTokens)
+  const providerDraft = ref<AIProviderName>(runtimeConfig.value.provider)
+  const modelDraft = ref(runtimeConfig.value.model)
+  const temperatureDraft = ref(runtimeConfig.value.temperature)
+  const topPDraft = ref(runtimeConfig.value.topP)
+  const maxTokensDraft = ref(runtimeConfig.value.maxTokens)
   const providerProbe = ref(
     'Test the active provider routing and stream a short architecture note.',
   )
-  const credentialNameDraft = ref(aiConfig.currentProviderCredential?.name || '')
-  const credentialRefDraft = ref(aiConfig.currentProviderCredential?.encryptedRef || '')
+  const credentialNameDraft = ref(currentProviderCredential.value?.name || '')
+  const credentialRefDraft = ref(currentProviderCredential.value?.encryptedRef || '')
 
   const currentModelOptions = computed(() => providerModels[providerDraft.value])
   const providerOptions = Object.keys(providerModels)
-  const credentialStatus = computed(() => Boolean(aiConfig.currentProviderCredential?.encryptedRef))
+  const credentialStatus = computed(() => Boolean(currentProviderCredential.value?.encryptedRef))
+
+  watch(
+    runtimeConfig,
+    (value) => {
+      providerDraft.value = value.provider
+      modelDraft.value = value.model
+      temperatureDraft.value = value.temperature
+      topPDraft.value = value.topP
+      maxTokensDraft.value = value.maxTokens
+      syncCredentialDrafts()
+    },
+    { immediate: true },
+  )
 
   function syncCredentialDrafts() {
-    const credential = aiConfig.currentProviderCredential
+    const credential = currentProviderCredential.value
     credentialNameDraft.value = credential?.name || ''
     credentialRefDraft.value = credential?.encryptedRef || ''
   }
 
   function handleProviderChange(value: string | number | boolean) {
     providerDraft.value = value as AIProviderName
-    aiConfig.setProvider(providerDraft.value)
     modelDraft.value = providerModels[providerDraft.value][0]
-    aiConfig.setModel(modelDraft.value)
+    updateRuntimeConfig({
+      provider: providerDraft.value,
+      model: modelDraft.value,
+    })
     syncCredentialDrafts()
   }
 
+  function handleModelChange() {
+    updateRuntimeConfig({ model: modelDraft.value })
+  }
+
+  function updateGenerationConfig(patch: AIConfigPatch) {
+    updateRuntimeConfig(patch)
+  }
+
   function saveProviderCredential() {
-    aiConfig.updateProviderCredential(providerDraft.value, {
+    const credential = {
+      id: `credential-${providerDraft.value}-${Date.now()}`,
       name: credentialNameDraft.value.trim() || `${providerDraft.value} credential`,
+      type: providerDraft.value,
       encryptedRef:
         credentialRefDraft.value.trim() || `${providerDraft.value}://credential-reference`,
+    }
+
+    updateRuntimeConfig({
+      providerCredentials: {
+        ...runtimeConfig.value.providerCredentials,
+        [providerDraft.value]: credential,
+      },
     })
     syncCredentialDrafts()
   }
 
   function clearProviderCredential() {
-    aiConfig.clearProviderCredential(providerDraft.value)
+    const nextCredentials = { ...runtimeConfig.value.providerCredentials }
+    delete nextCredentials[providerDraft.value]
+    updateRuntimeConfig({ providerCredentials: nextCredentials })
     syncCredentialDrafts()
   }
 
@@ -229,7 +308,7 @@ export function useProviderCenter() {
     currentApplication: aiScope.currentApplication,
     scopeReady: aiScope.scopeReady,
     scopeLabel: aiScope.scopeLabel,
-    aiConfig,
+    aiConfig: runtimeConfig,
     chatStatus,
     streaming,
     sendMessage,
@@ -245,6 +324,8 @@ export function useProviderCenter() {
     providerOptions,
     credentialStatus,
     handleProviderChange,
+    handleModelChange,
+    updateGenerationConfig,
     saveProviderCredential,
     clearProviderCredential,
   }
@@ -359,14 +440,16 @@ export function useKnowledgeConsole() {
 export function usePromptStudio() {
   const aiScope = useAiScope()
   onMounted(aiScope.ensureAiScope)
-  const aiConfig = useAiConfigStore()
+  const { runtimeConfig, updateRuntimeConfig } = useScopedRuntimeConfig(aiScope)
   const scopeKey = computed(() =>
     createScopeKey({
       workspaceId: aiScope.workspaceId.value,
       applicationId: aiScope.applicationId.value,
     }),
   )
-  const scopedState = computed(() => getScopedPromptState(scopeKey.value, aiConfig.systemPrompt))
+  const scopedState = computed(() =>
+    getScopedPromptState(scopeKey.value, runtimeConfig.value.systemPrompt),
+  )
   const selectedTemplateId = createWritableScopedRef(() => scopedState.value.selectedTemplateId)
   const templateDraft = createWritableScopedRef(() => scopedState.value.templateDraft)
   const promptVariables = createWritableScopedRef(() => scopedState.value.promptVariables)
@@ -378,6 +461,14 @@ export function usePromptStudio() {
     scopedState.value.engine.getTemplate(selectedTemplateId.value),
   )
   const variableSyntax = '{{variableName}}'
+
+  watch(
+    runtimeConfig,
+    (value) => {
+      systemPromptDraft.value = value.systemPrompt
+    },
+    { immediate: true },
+  )
 
   function parsePromptVariables() {
     try {
@@ -424,7 +515,7 @@ export function usePromptStudio() {
   }
 
   function saveSystemPrompt() {
-    aiConfig.updateConfig({ systemPrompt: systemPromptDraft.value })
+    updateRuntimeConfig({ systemPrompt: systemPromptDraft.value })
   }
 
   return {
@@ -433,7 +524,7 @@ export function usePromptStudio() {
     currentApplication: aiScope.currentApplication,
     scopeReady: aiScope.scopeReady,
     scopeLabel: aiScope.scopeLabel,
-    aiConfig,
+    aiConfig: runtimeConfig,
     templates,
     selectedTemplateId,
     selectedTemplate,
@@ -553,12 +644,12 @@ export function useRuntimeObservability() {
 export function useRuntimeSettings() {
   const aiScope = useAiScope()
   onMounted(aiScope.ensureAiScope)
-  const aiConfig = useAiConfigStore()
-  const contextWindowDraft = ref(aiConfig.contextWindow)
-  const compressionDraft = ref<CompressionStrategy>(aiConfig.compressionStrategy)
-  const streamDraft = ref(aiConfig.stream)
-  const knowledgeDraft = ref(aiConfig.enableKnowledge)
-  const cacheDraft = ref(aiConfig.enableCache)
+  const { runtimeConfig, updateRuntimeConfig, resetRuntimeConfig } = useScopedRuntimeConfig(aiScope)
+  const contextWindowDraft = ref(runtimeConfig.value.contextWindow)
+  const compressionDraft = ref<CompressionStrategy>(runtimeConfig.value.compressionStrategy)
+  const streamDraft = ref(runtimeConfig.value.stream)
+  const knowledgeDraft = ref(runtimeConfig.value.enableKnowledge)
+  const cacheDraft = ref(runtimeConfig.value.enableCache)
   const configJson = ref('')
   const configError = ref('')
 
@@ -569,16 +660,24 @@ export function useRuntimeSettings() {
       applicationId: aiScope.applicationId.value,
       applicationName: aiScope.currentApplication.value?.name || '',
     },
-    config: aiConfig.currentConfig,
+    config: runtimeConfig.value,
   }))
 
   function syncDraftsFromConfig() {
-    contextWindowDraft.value = aiConfig.contextWindow
-    compressionDraft.value = aiConfig.compressionStrategy
-    streamDraft.value = aiConfig.stream
-    knowledgeDraft.value = aiConfig.enableKnowledge
-    cacheDraft.value = aiConfig.enableCache
+    contextWindowDraft.value = runtimeConfig.value.contextWindow
+    compressionDraft.value = runtimeConfig.value.compressionStrategy
+    streamDraft.value = runtimeConfig.value.stream
+    knowledgeDraft.value = runtimeConfig.value.enableKnowledge
+    cacheDraft.value = runtimeConfig.value.enableCache
   }
+
+  watch(
+    runtimeConfig,
+    () => {
+      syncDraftsFromConfig()
+    },
+    { immediate: true },
+  )
 
   function exportConfig() {
     configJson.value = JSON.stringify(scopedConfigExport.value, null, 2)
@@ -596,7 +695,7 @@ export function useRuntimeSettings() {
           ? (parsed as { config: AIConfigPatch }).config
           : (parsed as AIConfigPatch)
 
-      aiConfig.updateConfig(patch)
+      updateRuntimeConfig(patch)
       syncDraftsFromConfig()
       exportConfig()
     } catch (error) {
@@ -605,7 +704,7 @@ export function useRuntimeSettings() {
   }
 
   function resetConfig() {
-    aiConfig.resetConfig()
+    resetRuntimeConfig()
     syncDraftsFromConfig()
     exportConfig()
   }
@@ -618,7 +717,7 @@ export function useRuntimeSettings() {
     currentApplication: aiScope.currentApplication,
     scopeReady: aiScope.scopeReady,
     scopeLabel: aiScope.scopeLabel,
-    aiConfig,
+    aiConfig: runtimeConfig,
     contextWindowDraft,
     compressionDraft,
     streamDraft,
@@ -626,6 +725,7 @@ export function useRuntimeSettings() {
     cacheDraft,
     configJson,
     configError,
+    updateRuntimeConfig,
     exportConfig,
     importConfig,
     resetConfig,

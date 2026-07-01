@@ -4,7 +4,12 @@ import { computed, watch } from 'vue'
 import { runtimeEventBus } from '@/ai/events/runtimeBus'
 import { getApplicationRuntimeBinding } from '@/ai/runtime/applicationRuntime'
 import type { ChatMessage, ChatRequest } from '@/ai/types'
-import { useAiConfigStore, useApplicationStore, useChatStore, useWorkspaceStore } from '@/store'
+import {
+  useApplicationStore,
+  useChatStore,
+  useRuntimeProfileStore,
+  useWorkspaceStore,
+} from '@/store'
 
 let eventsBound = false
 
@@ -23,7 +28,7 @@ function createUserMessage(content: string): ChatMessage {
 
 export function useChatRuntime() {
   const store = useChatStore()
-  const aiConfig = useAiConfigStore()
+  const runtimeProfile = useRuntimeProfileStore()
   const workspace = useWorkspaceStore()
   const application = useApplicationStore()
   const scopeKey = computed(
@@ -43,7 +48,7 @@ export function useChatRuntime() {
         knowledgeBaseId: application.currentApplication?.knowledgeBaseId,
         promptTemplateId: application.currentApplication?.promptTemplateId,
       },
-      () => aiConfig.currentConfig,
+      () => runtimeProfile.getResolvedConfig(application.currentApplication?.id),
     )
   }
 

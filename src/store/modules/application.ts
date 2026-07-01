@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 
 import { applicationRepository } from '@/domain/application/ApplicationRepository'
-import type { Application } from '@/domain/application/Application'
+import type { Application, CreateApplicationInput } from '@/domain/application/Application'
 
 const CURRENT_APPLICATION_KEY = 'enterprise-ai-platform:current-application'
 
@@ -71,6 +71,38 @@ export const useApplicationStore = defineStore('application', {
     clearApplication() {
       this.currentApplication = null
       this.applicationList = []
+    },
+    async createApplication(input: CreateApplicationInput) {
+      const application = await applicationRepository.create(input)
+      if (!this.applicationList.some((item) => item.id === application.id)) {
+        this.applicationList = [...this.applicationList, application]
+      }
+      await this.switchApplication(application.id)
+
+      return application
+    },
+    async updateApplication(id: string, patch: Partial<Omit<Application, 'id' | 'createdAt'>>) {
+      const application = await applicationRepository.update(id, patch)
+      if (!application) return null
+
+      this.applicationList = this.applicationList.map((item) =>
+        item.id === id ? application : item,
+      )
+      if (this.currentApplication?.id === id) {
+        this.currentApplication = application
+      }
+
+      return application
+    },
+    async deleteApplication(id: string) {
+      this.applicationList = await applicationRepository.delete(id)
+      if (this.currentApplication?.id === id) {
+        const fallback = this.applicationList[0] || null
+        this.currentApplication = fallback
+        if (fallback) {
+          persistCurrentApplicationId(fallback.workspaceId, fallback.id)
+        }
+      }
     },
   },
 })

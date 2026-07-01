@@ -18,13 +18,13 @@
             :min="1024"
             :max="128000"
             :step="1024"
-            @change="aiConfig.updateConfig({ contextWindow: contextWindowDraft })"
+            @change="updateRuntimeConfig({ contextWindow: contextWindowDraft })"
           />
         </el-form-item>
         <el-form-item :label="t('page.ai.settings.compressionStrategy')">
           <el-select
             v-model="compressionDraft"
-            @change="aiConfig.updateConfig({ compressionStrategy: compressionDraft })"
+            @change="updateRuntimeConfig({ compressionStrategy: compressionDraft })"
           >
             <el-option :label="t('page.ai.settings.strategyNone')" value="none" />
             <el-option :label="t('page.ai.settings.strategyWindow')" value="window" />
@@ -32,18 +32,18 @@
             <el-option :label="t('page.ai.settings.strategyHybrid')" value="hybrid" />
           </el-select>
         </el-form-item>
-        <el-checkbox v-model="streamDraft" @change="aiConfig.updateConfig({ stream: streamDraft })">
+        <el-checkbox v-model="streamDraft" @change="updateRuntimeConfig({ stream: streamDraft })">
           {{ t('page.ai.settings.enableStreaming') }}
         </el-checkbox>
         <el-checkbox
           v-model="knowledgeDraft"
-          @change="aiConfig.updateConfig({ enableKnowledge: knowledgeDraft })"
+          @change="updateRuntimeConfig({ enableKnowledge: knowledgeDraft })"
         >
           {{ t('page.ai.settings.enableKnowledge') }}
         </el-checkbox>
         <el-checkbox
           v-model="cacheDraft"
-          @change="aiConfig.updateConfig({ enableCache: cacheDraft })"
+          @change="updateRuntimeConfig({ enableCache: cacheDraft })"
         >
           {{ t('page.ai.settings.enableCache') }}
         </el-checkbox>
@@ -93,6 +93,7 @@ const {
   configJson,
   configError,
   scopeLabel,
+  updateRuntimeConfig,
   exportConfig,
   importConfig,
   resetConfig,
