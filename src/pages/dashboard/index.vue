@@ -1,483 +1,388 @@
 <template>
-  <div class="page">
-    <section class="positioning-panel">
+  <div class="page ai-overview-page">
+    <section class="overview-hero surface">
       <div>
-        <el-tag effect="plain" type="primary">{{ t('page.dashboard.positionBadge') }}</el-tag>
-        <h1 class="page-title">{{ t('page.dashboard.title') }}</h1>
-        <p class="page-subtitle">{{ t('page.dashboard.subtitle') }}</p>
+        <el-tag effect="plain" type="primary">Enterprise AI Platform</el-tag>
+        <h1 class="page-title">AI Operating Overview</h1>
+        <p class="page-subtitle">
+          Workspace-first control plane for applications, runtime, providers, knowledge, prompts,
+          conversations and observability.
+        </p>
       </div>
-      <div class="positioning-actions">
-        <el-tag type="success">{{ t('page.dashboard.realtimeMock') }}</el-tag>
-        <el-button type="primary" :loading="loading" @click="refetch">{{
-          t('common.refetch')
-        }}</el-button>
-      </div>
-    </section>
-
-    <section class="capability-grid">
-      <div v-for="item in capabilityItems" :key="item.titleKey" class="capability-card surface">
-        <el-icon>
-          <component :is="item.icon" />
-        </el-icon>
-        <div>
-          <strong>{{ t(item.titleKey) }}</strong>
-          <p>{{ t(item.contentKey) }}</p>
-        </div>
+      <div class="hero-context">
+        <span>{{ workspace.currentWorkspace?.name || 'No workspace' }}</span>
+        <strong>{{ application.currentApplication?.name || 'No application' }}</strong>
       </div>
     </section>
 
-    <div class="metric-grid">
-      <div v-for="item in data?.metrics" :key="item.label" class="metric surface">
-        <div class="metric-icon" :class="item.level">
-          <span class="status-dot" :class="item.level" />
+    <section class="overview-grid">
+      <div v-for="item in overviewCards" :key="item.label" class="surface overview-card">
+        <div class="card-head">
+          <el-icon>
+            <component :is="item.icon" />
+          </el-icon>
+          <el-tag size="small" :type="item.tag">{{ item.status }}</el-tag>
         </div>
-        <div>
-          <p>{{ item.labelKey ? t(item.labelKey) : item.label }}</p>
-          <strong>{{ getMetricValue(item) }}</strong>
-          <small>{{ item.trend }}</small>
-        </div>
-      </div>
-    </div>
-
-    <section class="dashboard-grid">
-      <div class="surface chart-panel">
-        <div class="toolbar">
-          <strong>{{ t('page.dashboard.ordersAndSales') }}</strong>
-          <div class="dashboard-actions">
-            <el-segmented v-model="mode" :options="modeOptions" />
-          </div>
-        </div>
-        <div ref="chartEl" class="chart" />
-      </div>
-
-      <div class="surface server-panel">
-        <div class="toolbar">
-          <div>
-            <h2 class="section-title">{{ t('page.dashboard.serverStatus') }}</h2>
-            <p class="section-subtitle">{{ t('page.dashboard.serverSubtitle') }}</p>
-          </div>
-          <el-tag type="success">{{ t('page.dashboard.status.healthy') }}</el-tag>
-        </div>
-        <div class="server-bars">
-          <div>
-            <span>{{ t('page.dashboard.cpu') }}</span>
-            <el-progress :percentage="data?.server.cpu || 0" />
-          </div>
-          <div>
-            <span>{{ t('page.dashboard.memory') }}</span>
-            <el-progress :percentage="data?.server.memory || 0" color="#d97706" />
-          </div>
-          <div>
-            <span>{{ t('page.dashboard.network') }}</span>
-            <el-progress :percentage="data?.server.network || 0" color="#16a34a" />
-          </div>
-        </div>
+        <span>{{ item.label }}</span>
+        <strong>{{ item.value }}</strong>
+        <p>{{ item.description }}</p>
       </div>
     </section>
 
-    <section class="surface activity-panel">
-      <div>
-        <h2 class="section-title">{{ t('page.dashboard.activityTitle') }}</h2>
-        <p class="section-subtitle">{{ t('page.dashboard.activitySubtitle') }}</p>
-      </div>
-      <div class="activity-list">
-        <div v-for="item in activityItems" :key="item.titleKey" class="activity-item">
-          <span class="status-dot" :class="item.level" />
+    <section class="overview-layout">
+      <div class="surface panel">
+        <div class="panel-head">
           <div>
-            <strong>{{ t(item.titleKey) }}</strong>
-            <p>{{ t(item.contentKey) }}</p>
+            <h2 class="section-title">Workspace Applications</h2>
+            <p class="section-subtitle">Applications are isolated under the selected workspace.</p>
           </div>
-          <time>{{ item.time }}</time>
+          <RouterLink to="/applications">
+            <el-button link type="primary">View all</el-button>
+          </RouterLink>
+        </div>
+        <div class="application-stack">
+          <RouterLink
+            v-for="item in application.applicationList"
+            :key="item.id"
+            :to="`/applications/${item.id}`"
+            class="application-row"
+            @click="application.switchApplication(item.id)"
+          >
+            <strong>{{ item.name }}</strong>
+            <span>{{ item.type }}</span>
+            <p>{{ item.description }}</p>
+          </RouterLink>
         </div>
       </div>
+
+      <aside class="side-stack">
+        <div class="surface panel">
+          <h2 class="section-title">Runtime Health</h2>
+          <div class="health-list">
+            <div>
+              <span>Status</span>
+              <strong>{{ chat.status }}</strong>
+            </div>
+            <div>
+              <span>Streaming</span>
+              <strong>{{ chat.streaming ? 'active' : 'idle' }}</strong>
+            </div>
+            <div>
+              <span>Context Window</span>
+              <strong>{{ aiConfig.contextWindow }}</strong>
+            </div>
+            <div>
+              <span>Compression</span>
+              <strong>{{ aiConfig.compressionStrategy }}</strong>
+            </div>
+          </div>
+        </div>
+
+        <div class="surface panel">
+          <h2 class="section-title">Recent Activities</h2>
+          <div class="activity-list">
+            <div v-for="item in activities" :key="item.title" class="activity-item">
+              <span class="status-dot" :class="item.level" />
+              <div>
+                <strong>{{ item.title }}</strong>
+                <p>{{ item.content }}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </aside>
     </section>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ChatDotRound, DataLine, Lock, Monitor, Operation, Tickets } from '@element-plus/icons-vue'
-import { computed, nextTick, ref, watch } from 'vue'
-import { useI18n } from 'vue-i18n'
-
-import type { DashboardData } from '@/api/dashboard'
-import { dashboardCacheKey, getDashboard } from '@/api/dashboard'
-import { useRequestCache } from '@/composables/useRequestCache'
-import { useEchart } from '@/hooks/useEchart'
-
-const mode = ref<'orders' | 'sales'>('orders')
-const { t } = useI18n()
-const chartEl = ref<HTMLElement>()
-const chart = useEchart(chartEl)
-const { data, loading, refetch } = useRequestCache(dashboardCacheKey, getDashboard, {
-  staleTime: 20_000,
-  cacheTime: 3 * 60_000,
+defineOptions({
+  name: 'AiOverviewDashboard',
 })
-const modeOptions = computed(() => [
-  { label: t('page.dashboard.mode.orders'), value: 'orders' },
-  { label: t('page.dashboard.mode.sales'), value: 'sales' },
-])
-const capabilityItems = [
+
+import {
+  ChatDotRound,
+  Connection,
+  Cpu,
+  DataLine,
+  Document,
+  Files,
+  Monitor,
+  Tickets,
+} from '@element-plus/icons-vue'
+import { computed, onMounted, watch } from 'vue'
+
+import { useAiConfigStore, useApplicationStore, useChatStore, useWorkspaceStore } from '@/store'
+
+const workspace = useWorkspaceStore()
+const application = useApplicationStore()
+const aiConfig = useAiConfigStore()
+const chat = useChatStore()
+
+const overviewCards = computed(() => [
   {
-    titleKey: 'page.dashboard.capability.rbacTitle',
-    contentKey: 'page.dashboard.capability.rbacContent',
-    icon: Lock,
+    label: 'Workspace',
+    value: workspace.currentWorkspace?.name || 'Not selected',
+    description: `${workspace.workspaceList.length} workspaces available`,
+    icon: Files,
+    status: workspace.currentWorkspace?.status || 'empty',
+    tag: 'primary' as const,
   },
   {
-    titleKey: 'page.dashboard.capability.schemaTitle',
-    contentKey: 'page.dashboard.capability.schemaContent',
-    icon: Operation,
-  },
-  {
-    titleKey: 'page.dashboard.capability.tableTitle',
-    contentKey: 'page.dashboard.capability.tableContent',
+    label: 'Current Application',
+    value: application.currentApplication?.name || 'Not selected',
+    description: application.currentApplication?.type || 'Application context is required',
     icon: Tickets,
+    status: application.currentApplication ? 'isolated' : 'empty',
+    tag: 'success' as const,
   },
   {
-    titleKey: 'page.dashboard.capability.aiTitle',
-    contentKey: 'page.dashboard.capability.aiContent',
+    label: 'Provider',
+    value: `${aiConfig.provider} / ${aiConfig.model}`,
+    description: aiConfig.currentProviderCredential
+      ? 'Credential reference configured'
+      : 'Mock-safe provider routing',
+    icon: Connection,
+    status: aiConfig.stream ? 'streaming' : 'sync',
+    tag: 'warning' as const,
+  },
+  {
+    label: 'Runtime',
+    value: chat.status,
+    description: chat.streaming ? 'Streaming response in progress' : 'Runtime ready for execution',
+    icon: Cpu,
+    status: chat.streaming ? 'active' : 'ready',
+    tag: chat.streaming ? ('warning' as const) : ('success' as const),
+  },
+  {
+    label: 'Knowledge',
+    value: workspace.currentWorkspace?.knowledgeRefs.length || 0,
+    description: aiConfig.enableKnowledge
+      ? 'RAG enabled in runtime config'
+      : 'RAG disabled in runtime config',
+    icon: Document,
+    status: aiConfig.enableKnowledge ? 'enabled' : 'disabled',
+    tag: 'info' as const,
+  },
+  {
+    label: 'Prompt',
+    value: workspace.currentWorkspace?.promptRefs.length || 0,
+    description: 'Prompt templates are scoped to workspace and applications',
     icon: ChatDotRound,
+    status: 'managed',
+    tag: 'primary' as const,
   },
   {
-    titleKey: 'page.dashboard.capability.monitorTitle',
-    contentKey: 'page.dashboard.capability.monitorContent',
-    icon: Monitor,
-  },
-  {
-    titleKey: 'page.dashboard.capability.visualTitle',
-    contentKey: 'page.dashboard.capability.visualContent',
+    label: 'Conversation',
+    value: workspace.currentWorkspace?.conversationRefs.length || 0,
+    description: 'Conversation repository prepared for workspace/application isolation',
     icon: DataLine,
+    status: 'prepared',
+    tag: 'success' as const,
   },
-]
-const activityItems = computed(() => [
   {
-    titleKey: 'page.dashboard.activity.rbacTitle',
-    contentKey: 'page.dashboard.activity.rbacContent',
-    time: '09:12',
+    label: 'Recent Trace',
+    value: chat.snapshot?.messages.at(-1)?.metadata?.traceId ? 'available' : 'pending',
+    description: 'Runtime observability remains available under /ai/observability',
+    icon: Monitor,
+    status: 'observable',
+    tag: 'info' as const,
+  },
+])
+
+const activities = computed(() => [
+  {
+    title: 'Workspace context active',
+    content: workspace.currentWorkspace?.name || 'Load a workspace to scope AI assets.',
     level: 'success',
   },
   {
-    titleKey: 'page.dashboard.activity.schemaTitle',
-    contentKey: 'page.dashboard.activity.schemaContent',
-    time: '09:18',
+    title: 'Application isolation prepared',
+    content: application.currentApplication?.name || 'Select an application for runtime binding.',
     level: 'info',
   },
   {
-    titleKey: 'page.dashboard.activity.alertTitle',
-    contentKey: 'page.dashboard.activity.alertContent',
-    time: '09:26',
+    title: 'Runtime keeps working',
+    content: 'ChatRuntime is intentionally unchanged in this sprint.',
     level: 'warning',
   },
 ])
 
-function draw() {
-  if (!data.value) return
-  chart.setOption({
-    color: ['#2563eb', '#16a34a'],
-    tooltip: {
-      trigger: 'axis',
-    },
-    grid: {
-      left: 36,
-      right: 16,
-      top: 32,
-      bottom: 28,
-    },
-    xAxis: {
-      type: 'category',
-      data: data.value.sales.map((item) => item.date),
-    },
-    yAxis: {
-      type: 'value',
-    },
-    series: [
-      {
-        name: mode.value,
-        type: mode.value === 'orders' ? 'bar' : 'line',
-        smooth: true,
-        data: data.value.sales.map((item) => item[mode.value]),
-      },
-    ],
-  })
-}
-
-function getMetricValue(item: DashboardData['metrics'][number]) {
-  if (item.labelKey === 'page.dashboard.metric.serverStatus') {
-    return t('page.dashboard.status.stable')
+async function syncOverview() {
+  if (!workspace.workspaceList.length) {
+    await workspace.loadWorkspaces()
   }
-
-  return item.value
+  if (workspace.currentWorkspace) {
+    await application.loadApplications(workspace.currentWorkspace.id)
+  }
 }
 
-watch([mode, data], async () => {
-  await nextTick()
-  draw()
-})
+onMounted(syncOverview)
+
+watch(
+  () => workspace.currentWorkspace?.id,
+  () => syncOverview(),
+)
 </script>
 
 <style scoped>
-.positioning-panel {
+.overview-hero {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 18px;
   margin-bottom: 16px;
-  border: 1px solid var(--app-border);
-  border-radius: 8px;
-  padding: 20px;
-  background:
-    linear-gradient(
-      135deg,
-      color-mix(in srgb, var(--app-primary) 9%, transparent),
-      transparent 48%
-    ),
-    var(--app-panel);
-  box-shadow: var(--app-shadow);
+  padding: 22px;
 }
 
-.positioning-panel .page-title {
+.overview-hero .page-title {
   margin-top: 12px;
 }
 
-.positioning-panel .page-subtitle {
-  max-width: 760px;
-  line-height: 1.6;
-}
-
-.positioning-actions {
-  display: flex;
-  flex: 0 0 auto;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 10px;
-}
-
-.capability-grid {
+.hero-context {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
-.capability-card {
-  display: grid;
-  grid-template-columns: 38px 1fr;
-  gap: 12px;
-  min-height: 112px;
-  padding: 16px;
-  transition:
-    border-color 0.18s ease,
-    background 0.18s ease;
-}
-
-.capability-card:hover {
-  border-color: color-mix(in srgb, var(--app-primary) 42%, var(--app-border));
-  background: var(--app-panel-muted);
-}
-
-.capability-card .el-icon {
-  display: grid;
-  width: 38px;
-  height: 38px;
-  place-items: center;
-  border-radius: 8px;
-  background: var(--app-panel-muted);
-  color: var(--app-primary);
-  font-size: 18px;
-}
-
-.capability-card strong {
-  color: var(--app-heading);
-}
-
-.capability-card p {
-  margin: 6px 0 0;
-  color: var(--app-muted);
-  font-size: 13px;
-  line-height: 1.5;
-}
-
-.metric-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 16px;
-}
-
-.metric {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 18px;
-  transition:
-    transform 0.18s ease,
-    box-shadow 0.18s ease;
-}
-
-.metric:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--app-shadow-strong);
-}
-
-.metric-icon {
-  display: grid;
-  width: 44px;
-  height: 44px;
-  flex: 0 0 44px;
-  place-items: center;
-  border-radius: 8px;
-  background: var(--app-panel-soft);
-}
-
-.metric p {
-  margin: 0;
-  color: var(--app-muted);
-}
-
-.metric strong {
-  display: block;
-  margin-top: 8px;
-  font-size: 28px;
-}
-
-.metric small {
-  color: var(--app-success);
-}
-
-.dashboard-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1.5fr) minmax(300px, 0.5fr);
-  gap: 16px;
-  margin-top: 16px;
-}
-
-.chart-panel,
-.server-panel {
-  padding: 18px;
-}
-
-.chart {
-  width: 100%;
-  height: 360px;
-}
-
-.server-bars {
-  display: grid;
-  gap: 22px;
-  margin-top: 28px;
-}
-
-.activity-panel {
-  display: grid;
-  gap: 16px;
-  margin-top: 16px;
-  padding: 18px;
-}
-
-.activity-list {
-  display: grid;
-  gap: 10px;
-}
-
-.activity-item {
-  display: grid;
-  grid-template-columns: 12px 1fr auto;
-  gap: 12px;
-  align-items: start;
+  gap: 6px;
+  min-width: 220px;
   border: 1px solid var(--app-border-subtle);
   border-radius: 8px;
-  padding: 12px;
+  padding: 14px;
   background: var(--app-panel-soft);
 }
 
-.activity-item p {
-  margin: 4px 0 0;
-  color: var(--app-muted);
-}
-
-.activity-item time {
+.hero-context span {
   color: var(--app-muted);
   font-size: 12px;
 }
 
-.server-bars span {
-  display: block;
-  margin-bottom: 8px;
+.overview-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.overview-card {
+  display: grid;
+  gap: 10px;
+  min-height: 176px;
+  padding: 16px;
+}
+
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.card-head .el-icon {
+  color: var(--app-primary);
+  font-size: 22px;
+}
+
+.overview-card span,
+.overview-card p {
   color: var(--app-muted);
 }
 
-.dashboard-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+.overview-card strong {
+  font-size: 22px;
+  word-break: break-word;
 }
 
-@media (max-width: 960px) {
-  .positioning-panel {
+.overview-card p {
+  margin: 0;
+  line-height: 1.6;
+}
+
+.overview-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 16px;
+  align-items: start;
+}
+
+.panel {
+  padding: 18px;
+}
+
+.panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.application-stack,
+.side-stack,
+.activity-list,
+.health-list {
+  display: grid;
+  gap: 10px;
+}
+
+.application-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px 12px;
+  border: 1px solid var(--app-border-subtle);
+  border-radius: 8px;
+  padding: 14px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.application-row span,
+.application-row p {
+  color: var(--app-muted);
+}
+
+.application-row p {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.health-list div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--app-border-subtle);
+  padding: 10px 0;
+}
+
+.health-list span,
+.activity-item p {
+  color: var(--app-muted);
+}
+
+.activity-item {
+  display: grid;
+  grid-template-columns: 10px 1fr;
+  gap: 10px;
+  align-items: start;
+}
+
+.activity-item p {
+  margin: 4px 0 0;
+}
+
+@media (max-width: 1180px) {
+  .overview-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .overview-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 680px) {
+  .overview-hero {
     display: grid;
   }
 
-  .positioning-actions {
-    justify-content: flex-start;
-  }
-
-  .capability-grid {
+  .overview-grid {
     grid-template-columns: 1fr;
-  }
-
-  .metric-grid,
-  .dashboard-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 1220px) and (min-width: 961px) {
-  .capability-grid,
-  .metric-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 640px) {
-  .positioning-panel,
-  .chart-panel,
-  .server-panel,
-  .activity-panel {
-    padding: 14px;
-  }
-
-  .positioning-actions,
-  .dashboard-actions {
-    width: 100%;
-  }
-
-  .positioning-actions .el-button,
-  .dashboard-actions :deep(.el-segmented) {
-    width: 100%;
-  }
-
-  .capability-card {
-    grid-template-columns: 34px 1fr;
-    min-height: auto;
-    padding: 14px;
-  }
-
-  .metric {
-    padding: 14px;
-  }
-
-  .metric strong {
-    font-size: 24px;
-  }
-
-  .chart {
-    height: 280px;
-  }
-
-  .activity-item {
-    grid-template-columns: 10px 1fr;
-  }
-
-  .activity-item time {
-    grid-column: 2;
   }
 }
 </style>

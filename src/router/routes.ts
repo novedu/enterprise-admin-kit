@@ -36,6 +36,42 @@ export const asyncChildren: RouteRecordRaw[] = [
     },
   },
   {
+    path: 'workspaces',
+    name: 'Workspaces',
+    component: () => import('@/pages/workspaces/index.vue'),
+    meta: {
+      title: 'Workspaces',
+      icon: 'Grid',
+    },
+  },
+  {
+    path: 'workspaces/:id',
+    name: 'WorkspaceDetail',
+    component: () => import('@/pages/workspaces/detail.vue'),
+    meta: {
+      title: 'Workspace',
+      icon: 'Grid',
+    },
+  },
+  {
+    path: 'applications',
+    name: 'Applications',
+    component: () => import('@/pages/applications/index.vue'),
+    meta: {
+      title: 'Applications',
+      icon: 'Operation',
+    },
+  },
+  {
+    path: 'applications/:id',
+    name: 'ApplicationDetail',
+    component: () => import('@/pages/applications/detail.vue'),
+    meta: {
+      title: 'Application',
+      icon: 'Operation',
+    },
+  },
+  {
     path: 'role',
     name: 'Role',
     component: () => import('@/pages/role/index.vue'),

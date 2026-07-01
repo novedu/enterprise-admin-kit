@@ -61,4 +61,11 @@ export interface ChatSnapshot {
   activeSessionId: string
   streaming: boolean
   timestamp: number
+  scope?: {
+    runtimeId: string
+    workspaceId?: string
+    workspaceName?: string
+    applicationId?: string
+    applicationName?: string
+  }
 }

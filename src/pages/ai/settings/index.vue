@@ -6,7 +6,10 @@
           <h2 class="section-title">{{ t('page.ai.settings.contextTitle') }}</h2>
           <p class="section-subtitle">{{ t('page.ai.settings.contextSubtitle') }}</p>
         </div>
-        <el-tag>{{ aiConfig.compressionStrategy }}</el-tag>
+        <div class="inline-actions">
+          <el-tag effect="plain">{{ scopeLabel }}</el-tag>
+          <el-tag>{{ aiConfig.compressionStrategy }}</el-tag>
+        </div>
       </div>
       <el-form label-position="top" class="control-form">
         <el-form-item :label="t('page.ai.settings.contextWindow')">
@@ -89,6 +92,7 @@ const {
   cacheDraft,
   configJson,
   configError,
+  scopeLabel,
   exportConfig,
   importConfig,
   resetConfig,

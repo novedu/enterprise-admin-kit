@@ -19,6 +19,8 @@ import type {
 
 import { RuntimeGuard } from './RuntimeGuard'
 
+export type ChatSnapshotDecorator = (snapshot: ChatSnapshot) => ChatSnapshot
+
 function createId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`
 }
@@ -86,6 +88,7 @@ export class ChatRuntime {
     private contextManager = new ContextManager(),
     private promptEngine = new PromptEngine(),
     private knowledgeBase = createDefaultKnowledgeBase(),
+    private decorateSnapshot: ChatSnapshotDecorator = (snapshot) => snapshot,
   ) {
     this.guard = new RuntimeGuard(provider, this.resolveGuardLimits())
   }
@@ -99,14 +102,14 @@ export class ChatRuntime {
   }
 
   getSnapshot(): ChatSnapshot {
-    return {
+    return this.decorateSnapshot({
       messages: getVisibleMessages(this.state.messages),
       sessions: cloneSessions(this.state.sessions),
       status: this.state.status,
       activeSessionId: this.state.activeSessionId,
       streaming: this.isBusy(),
       timestamp: now(),
-    }
+    })
   }
 
   getDefaultModel() {

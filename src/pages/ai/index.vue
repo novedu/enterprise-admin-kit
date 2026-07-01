@@ -6,6 +6,7 @@
         <p class="page-subtitle">{{ t('page.ai.subtitle') }}</p>
       </div>
       <div class="header-controls">
+        <el-tag effect="plain">{{ scopeLabel }}</el-tag>
         <el-tag type="success" effect="plain">{{ aiConfig.provider }}</el-tag>
         <el-tag effect="plain">{{ aiConfig.model }}</el-tag>
       </div>
@@ -32,13 +33,16 @@ defineOptions({
 })
 
 import { useI18n } from 'vue-i18n'
+import { onMounted } from 'vue'
 
 import { useAiConfigStore } from '@/store'
 
 import './shared/console.css'
+import { useAiScope } from './shared/useAiScope'
 
 const { t } = useI18n()
 const aiConfig = useAiConfigStore()
+const { scopeLabel, ensureAiScope } = useAiScope()
 
 const modules = [
   { name: 'AIProvider', labelKey: 'page.ai.tabs.provider' },
@@ -47,4 +51,6 @@ const modules = [
   { name: 'AIObservability', labelKey: 'page.ai.tabs.observability' },
   { name: 'AISettings', labelKey: 'page.ai.tabs.settings' },
 ]
+
+onMounted(ensureAiScope)
 </script>

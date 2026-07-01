@@ -6,7 +6,10 @@
           <h2 class="section-title">{{ t('page.ai.provider.routingTitle') }}</h2>
           <p class="section-subtitle">{{ t('page.ai.provider.routingSubtitle') }}</p>
         </div>
-        <el-tag :type="providerTagType(aiConfig.provider)">{{ aiConfig.provider }}</el-tag>
+        <div class="inline-actions">
+          <el-tag effect="plain">{{ scopeLabel }}</el-tag>
+          <el-tag :type="providerTagType(aiConfig.provider)">{{ aiConfig.provider }}</el-tag>
+        </div>
       </div>
 
       <el-form label-position="top" class="control-form">
@@ -153,6 +156,7 @@ const {
   currentModelOptions,
   providerOptions,
   credentialStatus,
+  scopeLabel,
   handleProviderChange,
   saveProviderCredential,
   clearProviderCredential,

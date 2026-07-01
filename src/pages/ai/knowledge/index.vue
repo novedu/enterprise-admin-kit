@@ -7,6 +7,7 @@
           <p class="section-subtitle">{{ t('page.ai.knowledge.managerSubtitle') }}</p>
         </div>
         <div class="base-toolbar">
+          <el-tag effect="plain">{{ scopeLabel }}</el-tag>
           <el-select
             v-model="activeKnowledgeBaseId"
             class="base-select"
@@ -135,6 +136,7 @@ const {
   retrievalTopK,
   retrievedChunks,
   citations,
+  scopeLabel,
   createKnowledgeBase,
   uploadKnowledgeDocument,
   runRetrieval,

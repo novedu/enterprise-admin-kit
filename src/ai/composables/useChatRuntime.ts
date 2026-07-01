@@ -1,10 +1,10 @@
 import { storeToRefs } from 'pinia'
-import { computed } from 'vue'
+import { computed, watch } from 'vue'
 
 import { runtimeEventBus } from '@/ai/events/runtimeBus'
-import { getChatRuntime } from '@/ai/runtime/runtimeInstance'
+import { getApplicationRuntimeBinding } from '@/ai/runtime/applicationRuntime'
 import type { ChatMessage, ChatRequest } from '@/ai/types'
-import { useChatStore } from '@/store'
+import { useAiConfigStore, useApplicationStore, useChatStore, useWorkspaceStore } from '@/store'
 
 let eventsBound = false
 
@@ -23,16 +23,45 @@ function createUserMessage(content: string): ChatMessage {
 
 export function useChatRuntime() {
   const store = useChatStore()
-  const runtime = getChatRuntime()
+  const aiConfig = useAiConfigStore()
+  const workspace = useWorkspaceStore()
+  const application = useApplicationStore()
+  const scopeKey = computed(
+    () =>
+      `${workspace.currentWorkspace?.id || 'global'}:${application.currentApplication?.id || 'global'}`,
+  )
+
+  function getCurrentBinding() {
+    return getApplicationRuntimeBinding(
+      {
+        workspaceId: workspace.currentWorkspace?.id,
+        workspaceName: workspace.currentWorkspace?.name,
+        applicationId: application.currentApplication?.id,
+        applicationName: application.currentApplication?.name,
+        runtimeConfigId: application.currentApplication?.runtimeConfigId,
+        providerId: application.currentApplication?.providerId,
+        knowledgeBaseId: application.currentApplication?.knowledgeBaseId,
+        promptTemplateId: application.currentApplication?.promptTemplateId,
+      },
+      () => aiConfig.currentConfig,
+    )
+  }
 
   if (!eventsBound) {
     runtimeEventBus.on('chat:snapshot', (snapshot) => {
+      if (snapshot.scope?.runtimeId !== getCurrentBinding().runtimeId) return
+
       store.setSnapshot(snapshot)
     })
     eventsBound = true
   }
 
-  store.setSnapshot(runtime.getSnapshot())
+  function syncCurrentSnapshot() {
+    store.setSnapshot(getCurrentBinding().runtime.getSnapshot())
+  }
+
+  syncCurrentSnapshot()
+  watch(scopeKey, syncCurrentSnapshot)
 
   const { messages, status } = storeToRefs(store)
   const streaming = computed(() => store.streaming)
@@ -44,6 +73,7 @@ export function useChatRuntime() {
     sendMessage: (prompt: string) => {
       const text = prompt.trim()
       if (!text) return
+      const runtime = getCurrentBinding().runtime
       const userMessage = createUserMessage(text)
       const snapshot = runtime.getSnapshot()
 
@@ -55,10 +85,10 @@ export function useChatRuntime() {
 
       return runtime.sendMessage(request)
     },
-    stop: () => runtime.stop(),
-    retry: () => runtime.retry(),
+    stop: () => getCurrentBinding().runtime.stop(),
+    retry: () => getCurrentBinding().runtime.retry(),
     clear: () => {
-      runtime.clear()
+      getCurrentBinding().runtime.clear()
     },
   }
 }

@@ -11,6 +11,10 @@ export type ObservabilitySamplingMode = 'debug' | 'normal' | 'production'
 export interface RuntimeMetadata {
   provider: string
   model: string
+  workspaceId?: string
+  workspaceName?: string
+  applicationId?: string
+  applicationName?: string
 }
 
 export interface RuntimeTrace {
@@ -22,6 +26,10 @@ export interface RuntimeTrace {
   duration?: number
   provider: string
   model: string
+  workspaceId?: string
+  workspaceName?: string
+  applicationId?: string
+  applicationName?: string
   status: TraceStatus
 }
 

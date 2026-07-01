@@ -6,9 +6,12 @@
           <h2 class="section-title">{{ t('page.ai.prompt.templatesTitle') }}</h2>
           <p class="section-subtitle">{{ t('page.ai.prompt.templatesSubtitle') }}</p>
         </div>
-        <el-button :icon="DocumentAdd" @click="savePromptTemplate">
-          {{ t('page.ai.actions.saveDraft') }}
-        </el-button>
+        <div class="inline-actions">
+          <el-tag effect="plain">{{ scopeLabel }}</el-tag>
+          <el-button :icon="DocumentAdd" @click="savePromptTemplate">
+            {{ t('page.ai.actions.saveDraft') }}
+          </el-button>
+        </div>
       </div>
       <el-radio-group v-model="selectedTemplateId" class="template-list" @change="selectTemplate">
         <el-radio-button v-for="template in templates" :key="template.id" :label="template.id">
@@ -87,6 +90,7 @@ const {
   promptError,
   variableSyntax,
   systemPromptDraft,
+  scopeLabel,
   savePromptTemplate,
   renderPromptPreview,
   selectTemplate,

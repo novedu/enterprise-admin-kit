@@ -6,9 +6,12 @@
           <h2 class="section-title">{{ t('page.ai.observability.traceTitle') }}</h2>
           <p class="section-subtitle">{{ t('page.ai.observability.traceSubtitle') }}</p>
         </div>
-        <el-button :icon="Delete" @click="clearObservability">
-          {{ t('page.ai.actions.clear') }}
-        </el-button>
+        <div class="inline-actions">
+          <el-tag effect="plain">{{ scopeLabel }}</el-tag>
+          <el-button :icon="Delete" @click="clearObservability">
+            {{ t('page.ai.actions.clear') }}
+          </el-button>
+        </div>
       </div>
       <div class="trace-list">
         <button
@@ -177,6 +180,7 @@ const {
   selectedLatency,
   selectedEvents,
   chunkEvents,
+  scopeLabel,
   startObservability,
   stopObservability,
   clearObservability,

@@ -21,6 +21,10 @@ export class TraceCollector {
       startTime,
       provider: metadata.provider,
       model: metadata.model,
+      workspaceId: metadata.workspaceId,
+      workspaceName: metadata.workspaceName,
+      applicationId: metadata.applicationId,
+      applicationName: metadata.applicationName,
       status: 'running',
     }
 

@@ -9,21 +9,26 @@
         </div>
       </div>
 
-      <el-menu
-        :default-active="route.path"
-        router
-        class="side-menu"
-        background-color="transparent"
-        text-color="#cbd5e1"
-        active-text-color="#ffffff"
-      >
-        <el-menu-item v-for="item in auth.menu" :key="item.path" :index="item.path">
-          <el-icon>
-            <component :is="resolveIcon(item.icon)" />
-          </el-icon>
-          <span>{{ item.titleKey ? t(item.titleKey) : item.title }}</span>
-        </el-menu-item>
-      </el-menu>
+      <div class="side-scroll">
+        <div v-for="group in navigationGroups" :key="group.label" class="nav-group">
+          <p>{{ group.label }}</p>
+          <el-menu
+            :default-active="route.path"
+            router
+            class="side-menu"
+            background-color="transparent"
+            text-color="#cbd5e1"
+            active-text-color="#ffffff"
+          >
+            <el-menu-item v-for="item in group.items" :key="item.path" :index="item.path">
+              <el-icon>
+                <component :is="resolveIcon(item.icon)" />
+              </el-icon>
+              <span>{{ item.title }}</span>
+            </el-menu-item>
+          </el-menu>
+        </div>
+      </div>
 
       <button class="collapse-trigger" type="button" @click="collapsed = !collapsed">
         <el-icon>
@@ -45,6 +50,34 @@
         </div>
 
         <div class="header-actions">
+          <el-select
+            v-model="selectedWorkspaceId"
+            class="context-select"
+            :loading="workspace.loading"
+            @change="handleWorkspaceChange"
+          >
+            <el-option
+              v-for="item in workspace.workspaceList"
+              :key="item.id"
+              :label="item.name"
+              :value="item.id"
+            />
+          </el-select>
+
+          <el-select
+            v-model="selectedApplicationId"
+            class="context-select"
+            :loading="application.loading"
+            @change="handleApplicationChange"
+          >
+            <el-option
+              v-for="item in application.applicationList"
+              :key="item.id"
+              :label="item.name"
+              :value="item.id"
+            />
+          </el-select>
+
           <el-popover
             placement="bottom-end"
             :width="'min(360px, calc(100vw - 24px))'"
@@ -122,56 +155,141 @@ import {
   Avatar,
   Bell,
   ChatDotRound,
+  Connection,
   DataLine,
   Document,
   Expand,
   Fold,
+  Grid,
   Lock,
   Monitor,
   Moon,
+  Operation,
   Setting,
   Sunny,
   User,
 } from '@element-plus/icons-vue'
-import { computed, ref, watchEffect } from 'vue'
+import { computed, onMounted, ref, watch, watchEffect } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
 
 import { useLocale } from '@/composables/useLocale'
 import { useTheme } from '@/composables/useTheme'
-import { useAuthStore, useNotificationStore } from '@/store'
+import { useApplicationStore, useAuthStore, useNotificationStore, useWorkspaceStore } from '@/store'
 
 const auth = useAuthStore()
 const notifications = useNotificationStore()
+const workspace = useWorkspaceStore()
+const application = useApplicationStore()
 const route = useRoute()
 const { t } = useI18n()
 const { locale, localeOptions } = useLocale()
 const { isDark, toggleTheme } = useTheme()
 const collapsed = ref(localStorage.getItem('enterprise-admin-sidebar') === 'collapsed')
+const selectedWorkspaceId = ref('')
+const selectedApplicationId = ref('')
 
 const iconMap = {
   Avatar,
   Bell,
   ChatDotRound,
+  Connection,
   DataLine,
   Document,
   Expand,
   Fold,
+  Grid,
   Lock,
   Monitor,
   Moon,
+  Operation,
   Setting,
   Sunny,
   User,
 }
 
 const resolveIcon = (name = 'DataLine') => iconMap[name as keyof typeof iconMap] || DataLine
+const navigationGroups = computed(() => [
+  {
+    label: 'Home',
+    items: [{ path: '/dashboard', title: t('menu.dashboard'), icon: 'DataLine' }],
+  },
+  {
+    label: 'Workspace',
+    items: [
+      { path: '/workspaces', title: 'Workspaces', icon: 'Grid' },
+      { path: '/applications', title: 'Applications', icon: 'Operation' },
+    ],
+  },
+  {
+    label: 'AI Studio',
+    items: [
+      { path: '/ai/provider', title: t('page.ai.tabs.provider'), icon: 'Connection' },
+      { path: '/ai/knowledge', title: t('page.ai.tabs.knowledge'), icon: 'Document' },
+      { path: '/ai/prompt', title: t('page.ai.tabs.prompt'), icon: 'ChatDotRound' },
+    ],
+  },
+  {
+    label: 'Runtime',
+    items: [
+      { path: '/ai/observability', title: t('page.ai.tabs.observability'), icon: 'Monitor' },
+      { path: '/ai/settings', title: t('page.ai.tabs.settings'), icon: 'Setting' },
+    ],
+  },
+  {
+    label: 'Governance',
+    items: [{ path: '/monitor', title: t('menu.monitor'), icon: 'Monitor' }],
+  },
+  {
+    label: 'Admin',
+    items: [
+      { path: '/user', title: t('menu.user'), icon: 'User' },
+      { path: '/role', title: t('menu.role'), icon: 'Lock' },
+      { path: '/schema-editor', title: t('menu.schemaEditor'), icon: 'Document' },
+      { path: '/setting', title: t('menu.setting'), icon: 'Setting' },
+      { path: '/profile', title: t('menu.profile'), icon: 'Avatar' },
+    ],
+  },
+])
 const pageTitle = computed(() => {
   const titleKey = route.meta.titleKey
   return typeof titleKey === 'string'
     ? t(titleKey)
     : String(route.meta.title || 'Enterprise Admin Kit')
 })
+
+async function handleWorkspaceChange(value: string | number | boolean) {
+  await workspace.switchWorkspace(String(value))
+  selectedWorkspaceId.value = workspace.currentWorkspace?.id || ''
+  await application.loadApplications(selectedWorkspaceId.value)
+  selectedApplicationId.value = application.currentApplication?.id || ''
+}
+
+async function handleApplicationChange(value: string | number | boolean) {
+  await application.switchApplication(String(value))
+  selectedApplicationId.value = application.currentApplication?.id || ''
+}
+
+onMounted(async () => {
+  await workspace.loadWorkspaces()
+  selectedWorkspaceId.value = workspace.currentWorkspace?.id || ''
+  await application.loadApplications(selectedWorkspaceId.value)
+  selectedApplicationId.value = application.currentApplication?.id || ''
+})
+
+watch(
+  () => workspace.currentWorkspace?.id,
+  (id) => {
+    selectedWorkspaceId.value = id || ''
+  },
+)
+
+watch(
+  () => application.currentApplication?.id,
+  (id) => {
+    selectedApplicationId.value = id || ''
+  },
+)
 
 watchEffect(() => {
   localStorage.setItem('enterprise-admin-sidebar', collapsed.value ? 'collapsed' : 'expanded')
@@ -209,7 +327,8 @@ watchEffect(() => {
 }
 
 .admin-layout.is-collapsed .brand div:last-child,
-.admin-layout.is-collapsed .side-menu span {
+.admin-layout.is-collapsed .side-menu span,
+.admin-layout.is-collapsed .nav-group p {
   display: none;
 }
 
@@ -232,10 +351,27 @@ watchEffect(() => {
   font-size: 12px;
 }
 
-.side-menu {
+.side-scroll {
   flex: 1;
-  border-right: none;
+  overflow: auto;
   padding: 8px 8px 12px;
+}
+
+.nav-group {
+  margin-bottom: 10px;
+}
+
+.nav-group p {
+  margin: 12px 10px 6px;
+  color: var(--app-sidebar-subtle);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.side-menu {
+  border-right: none;
 }
 
 .side-menu :deep(.el-menu-item) {
@@ -310,6 +446,10 @@ watchEffect(() => {
   display: flex;
   align-items: center;
   gap: 14px;
+}
+
+.context-select {
+  width: 174px;
 }
 
 .locale-select {
@@ -393,11 +533,12 @@ watchEffect(() => {
 
   .brand,
   .collapse-trigger,
-  .side-menu span {
+  .side-menu span,
+  .nav-group p {
     display: none;
   }
 
-  .side-menu {
+  .side-scroll {
     display: flex;
     width: 100%;
     overflow-x: auto;
@@ -405,8 +546,17 @@ watchEffect(() => {
     scrollbar-width: none;
   }
 
-  .side-menu::-webkit-scrollbar {
+  .side-scroll::-webkit-scrollbar {
     display: none;
+  }
+
+  .nav-group {
+    flex: 0 0 auto;
+    margin-bottom: 0;
+  }
+
+  .side-menu {
+    display: flex;
   }
 
   .side-menu :deep(.el-menu-item) {
@@ -448,6 +598,10 @@ watchEffect(() => {
 
   .locale-select {
     width: 96px;
+  }
+
+  .context-select {
+    width: 150px;
   }
 
   .profile-trigger span {

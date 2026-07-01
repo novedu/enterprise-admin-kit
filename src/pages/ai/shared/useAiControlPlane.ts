@@ -1,14 +1,18 @@
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import type { Ref } from 'vue'
 
 import { useChatRuntime } from '@/ai/composables/useChatRuntime'
 import { runtimeEventBus } from '@/ai/events/runtimeBus'
 import { KnowledgeWorkspace } from '@/ai/knowledge'
+import type { KnowledgeChunk, KnowledgeCitation, KnowledgeDocument } from '@/ai/knowledge'
 import { RuntimeInspector } from '@/ai/observability'
 import type { RuntimeInspectionSnapshot, TraceStatus } from '@/ai/observability'
 import { PromptEngine } from '@/ai/prompt'
 import type { PromptTemplate } from '@/ai/prompt'
 import type { AIConfigPatch, AIProviderName, CompressionStrategy } from '@/ai/types'
-import { useAiConfigStore } from '@/store'
+import { useAiConfigStore, useApplicationStore, useWorkspaceStore } from '@/store'
+
+import { useAiScope } from './useAiScope'
 
 export const providerModels: Record<AIProviderName, string[]> = {
   mock: ['mock-chat-runtime'],
@@ -18,58 +22,22 @@ export const providerModels: Record<AIProviderName, string[]> = {
   deepseek: ['deepseek-chat', 'deepseek-reasoner'],
 }
 
-const workspace = new KnowledgeWorkspace()
-const defaultKnowledgeBase = workspace.createKnowledgeBase({
-  id: 'runtime-docs',
-  name: 'Runtime Docs',
-  chunkSize: 360,
-})
-defaultKnowledgeBase.uploadDocument({
-  title: 'Runtime Architecture',
-  content:
-    'ChatRuntime orchestrates context building, knowledge retrieval, prompt construction and provider streaming. ContextManager controls token windows and compression. PromptEngine renders final prompts. KnowledgeBase provides mock RAG citations.',
-})
-
-const promptEngine = new PromptEngine()
 const inspector = new RuntimeInspector(runtimeEventBus, {
   metadataResolver: () => {
     const config = useAiConfigStore()
+    const workspace = useWorkspaceStore()
+    const application = useApplicationStore()
 
     return {
       provider: config.provider,
       model: config.model,
+      workspaceId: workspace.currentWorkspace?.id,
+      workspaceName: workspace.currentWorkspace?.name,
+      applicationId: application.currentApplication?.id,
+      applicationName: application.currentApplication?.name,
     }
   },
 })
-
-const activeKnowledgeBaseId = ref(defaultKnowledgeBase.id)
-const newKnowledgeBaseName = ref('Security Runbook')
-const documentTitle = ref('Knowledge Notes')
-const documentContent = ref('')
-const retrievalQuery = ref('runtime prompt knowledge')
-const retrievalTopK = ref(3)
-const documents = ref(defaultKnowledgeBase.getDocuments())
-const retrievedChunks = ref(defaultKnowledgeBase.retrieve(retrievalQuery.value))
-const citations = ref(defaultKnowledgeBase.cite(retrievedChunks.value))
-
-const selectedTemplateId = ref('default-chat')
-const templateDraft = ref(promptEngine.getTemplate(selectedTemplateId.value)?.template || '')
-const promptVariables = ref(
-  JSON.stringify(
-    {
-      role: 'enterprise',
-      domain: 'AI runtime',
-      context: 'The runtime uses EventBus, Provider Factory and ContextManager.',
-      input: 'Explain the current architecture.',
-      goal: 'Inspect runtime behavior',
-      tools: 'TraceCollector, KnowledgeBase, PromptEngine',
-    },
-    null,
-    2,
-  ),
-)
-const promptPreview = ref('')
-const promptError = ref('')
 
 const emptySnapshot: RuntimeInspectionSnapshot = {
   traces: [],
@@ -82,7 +50,134 @@ const selectedTraceId = ref('')
 let observabilityStarted = false
 let snapshotTimer: number | undefined
 
+const FALLBACK_SCOPE_KEY = 'workspace:pending/application:pending'
+
+interface ScopeIdentity {
+  workspaceId: string
+  applicationId: string
+}
+
+interface KnowledgeConsoleState {
+  workspace: KnowledgeWorkspace
+  activeKnowledgeBaseId: Ref<string>
+  newKnowledgeBaseName: Ref<string>
+  documentTitle: Ref<string>
+  documentContent: Ref<string>
+  retrievalQuery: Ref<string>
+  retrievalTopK: Ref<number>
+  documents: Ref<KnowledgeDocument[]>
+  retrievedChunks: Ref<KnowledgeChunk[]>
+  citations: Ref<KnowledgeCitation[]>
+}
+
+interface PromptStudioState {
+  engine: PromptEngine
+  selectedTemplateId: Ref<string>
+  templateDraft: Ref<string>
+  promptVariables: Ref<string>
+  promptPreview: Ref<string>
+  promptError: Ref<string>
+  systemPromptDraft: Ref<string>
+  templates: Ref<PromptTemplate[]>
+}
+
+const knowledgeStates = new Map<string, KnowledgeConsoleState>()
+const promptStates = new Map<string, PromptStudioState>()
+
+function createScopeKey(scope: ScopeIdentity) {
+  if (!scope.workspaceId || !scope.applicationId) return FALLBACK_SCOPE_KEY
+
+  return `workspace:${scope.workspaceId}/application:${scope.applicationId}`
+}
+
+function getScopedKnowledgeState(scopeKey: string) {
+  const cached = knowledgeStates.get(scopeKey)
+  if (cached) return cached
+
+  const knowledgeWorkspace = new KnowledgeWorkspace()
+  const defaultKnowledgeBase = knowledgeWorkspace.createKnowledgeBase({
+    id: 'runtime-docs',
+    name: 'Runtime Docs',
+    chunkSize: 360,
+  })
+  defaultKnowledgeBase.uploadDocument({
+    title: 'Runtime Architecture',
+    content:
+      'ChatRuntime orchestrates context building, knowledge retrieval, prompt construction and provider streaming. ContextManager controls token windows and compression. PromptEngine renders final prompts. KnowledgeBase provides mock RAG citations.',
+  })
+
+  const retrievalQuery = ref('runtime prompt knowledge')
+  const retrievalTopK = ref(3)
+  const retrievalResult = defaultKnowledgeBase.query(retrievalQuery.value, {
+    topK: retrievalTopK.value,
+  })
+  const state: KnowledgeConsoleState = {
+    workspace: knowledgeWorkspace,
+    activeKnowledgeBaseId: ref(defaultKnowledgeBase.id),
+    newKnowledgeBaseName: ref('Security Runbook'),
+    documentTitle: ref('Knowledge Notes'),
+    documentContent: ref(''),
+    retrievalQuery,
+    retrievalTopK,
+    documents: ref(defaultKnowledgeBase.getDocuments()),
+    retrievedChunks: ref(retrievalResult.chunks),
+    citations: ref(retrievalResult.citations),
+  }
+
+  knowledgeStates.set(scopeKey, state)
+
+  return state
+}
+
+function createDefaultPromptVariables() {
+  return JSON.stringify(
+    {
+      role: 'enterprise',
+      domain: 'AI runtime',
+      context: 'The runtime uses EventBus, Provider Factory and ContextManager.',
+      input: 'Explain the current architecture.',
+      goal: 'Inspect runtime behavior',
+      tools: 'TraceCollector, KnowledgeBase, PromptEngine',
+    },
+    null,
+    2,
+  )
+}
+
+function getScopedPromptState(scopeKey: string, systemPrompt: string) {
+  const cached = promptStates.get(scopeKey)
+  if (cached) return cached
+
+  const engine = new PromptEngine()
+  const selectedTemplateId = ref('default-chat')
+  const state: PromptStudioState = {
+    engine,
+    selectedTemplateId,
+    templateDraft: ref(engine.getTemplate(selectedTemplateId.value)?.template || ''),
+    promptVariables: ref(createDefaultPromptVariables()),
+    promptPreview: ref(''),
+    promptError: ref(''),
+    systemPromptDraft: ref(systemPrompt),
+    templates: ref(engine.listTemplates()),
+  }
+
+  promptStates.set(scopeKey, state)
+
+  return state
+}
+
+function createWritableScopedRef<T>(getValue: () => Ref<T>) {
+  return computed<T>({
+    get: () => getValue().value,
+    set: (value) => {
+      getValue().value = value
+    },
+  })
+}
+
 export function useProviderCenter() {
+  const aiScope = useAiScope()
+  onMounted(aiScope.ensureAiScope)
   const aiConfig = useAiConfigStore()
   const { status: chatStatus, streaming, sendMessage } = useChatRuntime()
   const providerDraft = ref<AIProviderName>(aiConfig.provider)
@@ -129,6 +224,11 @@ export function useProviderCenter() {
   }
 
   return {
+    aiScope,
+    currentWorkspace: aiScope.currentWorkspace,
+    currentApplication: aiScope.currentApplication,
+    scopeReady: aiScope.scopeReady,
+    scopeLabel: aiScope.scopeLabel,
     aiConfig,
     chatStatus,
     streaming,
@@ -151,14 +251,34 @@ export function useProviderCenter() {
 }
 
 export function useKnowledgeConsole() {
-  const activeKnowledgeBase = computed(() =>
-    workspace.getKnowledgeBase(activeKnowledgeBaseId.value),
+  const aiScope = useAiScope()
+  onMounted(aiScope.ensureAiScope)
+  const scopeKey = computed(() =>
+    createScopeKey({
+      workspaceId: aiScope.workspaceId.value,
+      applicationId: aiScope.applicationId.value,
+    }),
   )
-  const knowledgeBases = computed(() => workspace.listKnowledgeBases())
+  const scopedState = computed(() => getScopedKnowledgeState(scopeKey.value))
+  const activeKnowledgeBaseId = createWritableScopedRef(
+    () => scopedState.value.activeKnowledgeBaseId,
+  )
+  const newKnowledgeBaseName = createWritableScopedRef(() => scopedState.value.newKnowledgeBaseName)
+  const documentTitle = createWritableScopedRef(() => scopedState.value.documentTitle)
+  const documentContent = createWritableScopedRef(() => scopedState.value.documentContent)
+  const retrievalQuery = createWritableScopedRef(() => scopedState.value.retrievalQuery)
+  const retrievalTopK = createWritableScopedRef(() => scopedState.value.retrievalTopK)
+  const documents = computed(() => scopedState.value.documents.value)
+  const retrievedChunks = computed(() => scopedState.value.retrievedChunks.value)
+  const citations = computed(() => scopedState.value.citations.value)
+  const activeKnowledgeBase = computed(() =>
+    scopedState.value.workspace.getKnowledgeBase(activeKnowledgeBaseId.value),
+  )
+  const knowledgeBases = computed(() => scopedState.value.workspace.listKnowledgeBases())
 
   function refreshKnowledgeState() {
     const base = activeKnowledgeBase.value
-    documents.value = base?.getDocuments() || []
+    scopedState.value.documents.value = base?.getDocuments() || []
   }
 
   function createKnowledgeBase() {
@@ -170,7 +290,7 @@ export function useKnowledgeConsole() {
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-|-$/g, '')
 
-    const base = workspace.createKnowledgeBase({
+    const base = scopedState.value.workspace.createKnowledgeBase({
       id: `${id || 'knowledge'}-${Date.now()}`,
       name,
       chunkSize: 360,
@@ -202,17 +322,22 @@ export function useKnowledgeConsole() {
     const result = base.query(retrievalQuery.value, {
       topK: retrievalTopK.value,
     })
-    retrievedChunks.value = result.chunks
-    citations.value = result.citations
+    scopedState.value.retrievedChunks.value = result.chunks
+    scopedState.value.citations.value = result.citations
   }
 
   function switchKnowledgeBase(id: string) {
-    workspace.switchKnowledgeBase(id)
+    scopedState.value.workspace.switchKnowledgeBase(id)
     refreshKnowledgeState()
     runRetrieval()
   }
 
   return {
+    aiScope,
+    currentWorkspace: aiScope.currentWorkspace,
+    currentApplication: aiScope.currentApplication,
+    scopeReady: aiScope.scopeReady,
+    scopeLabel: aiScope.scopeLabel,
     activeKnowledgeBase,
     activeKnowledgeBaseId,
     knowledgeBases,
@@ -232,10 +357,26 @@ export function useKnowledgeConsole() {
 }
 
 export function usePromptStudio() {
+  const aiScope = useAiScope()
+  onMounted(aiScope.ensureAiScope)
   const aiConfig = useAiConfigStore()
-  const systemPromptDraft = ref(aiConfig.systemPrompt)
-  const templates = ref(promptEngine.listTemplates())
-  const selectedTemplate = computed(() => promptEngine.getTemplate(selectedTemplateId.value))
+  const scopeKey = computed(() =>
+    createScopeKey({
+      workspaceId: aiScope.workspaceId.value,
+      applicationId: aiScope.applicationId.value,
+    }),
+  )
+  const scopedState = computed(() => getScopedPromptState(scopeKey.value, aiConfig.systemPrompt))
+  const selectedTemplateId = createWritableScopedRef(() => scopedState.value.selectedTemplateId)
+  const templateDraft = createWritableScopedRef(() => scopedState.value.templateDraft)
+  const promptVariables = createWritableScopedRef(() => scopedState.value.promptVariables)
+  const promptPreview = createWritableScopedRef(() => scopedState.value.promptPreview)
+  const promptError = createWritableScopedRef(() => scopedState.value.promptError)
+  const systemPromptDraft = createWritableScopedRef(() => scopedState.value.systemPromptDraft)
+  const templates = computed(() => scopedState.value.templates.value)
+  const selectedTemplate = computed(() =>
+    scopedState.value.engine.getTemplate(selectedTemplateId.value),
+  )
   const variableSyntax = '{{variableName}}'
 
   function parsePromptVariables() {
@@ -256,8 +397,8 @@ export function usePromptStudio() {
       ...template,
       template: templateDraft.value,
     }
-    promptEngine.register(nextTemplate)
-    templates.value = promptEngine.listTemplates()
+    scopedState.value.engine.register(nextTemplate)
+    scopedState.value.templates.value = scopedState.value.engine.listTemplates()
   }
 
   function renderPromptPreview() {
@@ -265,18 +406,20 @@ export function usePromptStudio() {
     const variables = parsePromptVariables()
     if (!variables) return
 
-    promptPreview.value = promptEngine.buildFromContext(selectedTemplateId.value, {
+    const knowledgeState = getScopedKnowledgeState(scopeKey.value)
+
+    promptPreview.value = scopedState.value.engine.buildFromContext(selectedTemplateId.value, {
       systemPrompt: systemPromptDraft.value,
       userPrompt: String(variables.input || ''),
       variables,
-      retrievedDocuments: retrievedChunks.value,
-      citations: citations.value,
+      retrievedDocuments: knowledgeState.retrievedChunks.value,
+      citations: knowledgeState.citations.value,
     })
   }
 
   function selectTemplate(templateId: string) {
     selectedTemplateId.value = templateId
-    templateDraft.value = promptEngine.getTemplate(templateId)?.template || ''
+    templateDraft.value = scopedState.value.engine.getTemplate(templateId)?.template || ''
     renderPromptPreview()
   }
 
@@ -285,6 +428,11 @@ export function usePromptStudio() {
   }
 
   return {
+    aiScope,
+    currentWorkspace: aiScope.currentWorkspace,
+    currentApplication: aiScope.currentApplication,
+    scopeReady: aiScope.scopeReady,
+    scopeLabel: aiScope.scopeLabel,
     aiConfig,
     templates,
     selectedTemplateId,
@@ -303,19 +451,39 @@ export function usePromptStudio() {
 }
 
 export function useRuntimeObservability() {
-  const latestTrace = computed(() => runtimeSnapshot.value.traces.at(-1))
+  const aiScope = useAiScope()
+  onMounted(aiScope.ensureAiScope)
+  const scopedSnapshot = computed<RuntimeInspectionSnapshot>(() => {
+    const workspaceId = aiScope.workspaceId.value
+    const applicationId = aiScope.applicationId.value
+    if (!workspaceId || !applicationId) return emptySnapshot
+
+    const traceIds = new Set(
+      runtimeSnapshot.value.traces
+        .filter(
+          (trace) => trace.workspaceId === workspaceId && trace.applicationId === applicationId,
+        )
+        .map((trace) => trace.traceId),
+    )
+
+    return {
+      traces: runtimeSnapshot.value.traces.filter((trace) => traceIds.has(trace.traceId)),
+      events: runtimeSnapshot.value.events.filter((event) => traceIds.has(event.traceId)),
+      tokenUsage: runtimeSnapshot.value.tokenUsage.filter((usage) => traceIds.has(usage.traceId)),
+      latency: runtimeSnapshot.value.latency.filter((metrics) => traceIds.has(metrics.traceId)),
+    }
+  })
+  const latestTrace = computed(() => scopedSnapshot.value.traces.at(-1))
   const selectedTrace = computed(
     () =>
-      runtimeSnapshot.value.traces.find((trace) => trace.traceId === selectedTraceId.value) ||
+      scopedSnapshot.value.traces.find((trace) => trace.traceId === selectedTraceId.value) ||
       latestTrace.value,
   )
   const selectedTokenUsage = computed(() =>
-    runtimeSnapshot.value.tokenUsage.find(
-      (usage) => usage.traceId === selectedTrace.value?.traceId,
-    ),
+    scopedSnapshot.value.tokenUsage.find((usage) => usage.traceId === selectedTrace.value?.traceId),
   )
   const selectedLatency = computed(() =>
-    runtimeSnapshot.value.latency.find(
+    scopedSnapshot.value.latency.find(
       (metrics) => metrics.traceId === selectedTrace.value?.traceId,
     ),
   )
@@ -323,7 +491,7 @@ export function useRuntimeObservability() {
     const traceId = selectedTrace.value?.traceId
     if (!traceId) return []
 
-    return runtimeSnapshot.value.events.filter((event) => event.traceId === traceId)
+    return scopedSnapshot.value.events.filter((event) => event.traceId === traceId)
   })
   const chunkEvents = computed(() =>
     selectedEvents.value.filter((event) => event.type === 'chat:chunk'),
@@ -331,7 +499,12 @@ export function useRuntimeObservability() {
 
   function refreshSnapshot() {
     runtimeSnapshot.value = inspector.getSnapshot()
-    selectedTraceId.value ||= runtimeSnapshot.value.traces.at(-1)?.traceId || ''
+    const selectedStillVisible = scopedSnapshot.value.traces.some(
+      (trace) => trace.traceId === selectedTraceId.value,
+    )
+    if (!selectedStillVisible) {
+      selectedTraceId.value = scopedSnapshot.value.traces.at(-1)?.traceId || ''
+    }
   }
 
   function startObservability() {
@@ -357,7 +530,12 @@ export function useRuntimeObservability() {
   }
 
   return {
-    snapshot: runtimeSnapshot,
+    aiScope,
+    currentWorkspace: aiScope.currentWorkspace,
+    currentApplication: aiScope.currentApplication,
+    scopeReady: aiScope.scopeReady,
+    scopeLabel: aiScope.scopeLabel,
+    snapshot: scopedSnapshot,
     selectedTraceId,
     latestTrace,
     selectedTrace,
@@ -373,14 +551,26 @@ export function useRuntimeObservability() {
 }
 
 export function useRuntimeSettings() {
+  const aiScope = useAiScope()
+  onMounted(aiScope.ensureAiScope)
   const aiConfig = useAiConfigStore()
   const contextWindowDraft = ref(aiConfig.contextWindow)
   const compressionDraft = ref<CompressionStrategy>(aiConfig.compressionStrategy)
   const streamDraft = ref(aiConfig.stream)
   const knowledgeDraft = ref(aiConfig.enableKnowledge)
   const cacheDraft = ref(aiConfig.enableCache)
-  const configJson = ref(JSON.stringify(aiConfig.currentConfig, null, 2))
+  const configJson = ref('')
   const configError = ref('')
+
+  const scopedConfigExport = computed(() => ({
+    scope: {
+      workspaceId: aiScope.workspaceId.value,
+      workspaceName: aiScope.currentWorkspace.value?.name || '',
+      applicationId: aiScope.applicationId.value,
+      applicationName: aiScope.currentApplication.value?.name || '',
+    },
+    config: aiConfig.currentConfig,
+  }))
 
   function syncDraftsFromConfig() {
     contextWindowDraft.value = aiConfig.contextWindow
@@ -391,14 +581,22 @@ export function useRuntimeSettings() {
   }
 
   function exportConfig() {
-    configJson.value = JSON.stringify(aiConfig.currentConfig, null, 2)
+    configJson.value = JSON.stringify(scopedConfigExport.value, null, 2)
     configError.value = ''
   }
 
   function importConfig() {
     try {
-      const parsed = JSON.parse(configJson.value) as AIConfigPatch
-      aiConfig.updateConfig(parsed)
+      const parsed = JSON.parse(configJson.value) as unknown
+      const patch =
+        parsed &&
+        typeof parsed === 'object' &&
+        'config' in parsed &&
+        (parsed as { config?: unknown }).config
+          ? (parsed as { config: AIConfigPatch }).config
+          : (parsed as AIConfigPatch)
+
+      aiConfig.updateConfig(patch)
       syncDraftsFromConfig()
       exportConfig()
     } catch (error) {
@@ -412,7 +610,14 @@ export function useRuntimeSettings() {
     exportConfig()
   }
 
+  exportConfig()
+
   return {
+    aiScope,
+    currentWorkspace: aiScope.currentWorkspace,
+    currentApplication: aiScope.currentApplication,
+    scopeReady: aiScope.scopeReady,
+    scopeLabel: aiScope.scopeLabel,
     aiConfig,
     contextWindowDraft,
     compressionDraft,
