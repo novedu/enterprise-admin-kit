@@ -66,9 +66,13 @@ router.beforeEach((to) => {
     !to.matched.some(
       (record) => record.name && auth.permissions.routes.includes(String(record.name)),
     ) &&
-    !['Workspaces', 'WorkspaceDetail', 'Applications', 'ApplicationDetail'].includes(
-      String(to.name),
-    ) &&
+    ![
+      'Workspaces',
+      'WorkspaceDetail',
+      'Applications',
+      'ApplicationDetail',
+      'Conversations',
+    ].includes(String(to.name)) &&
     to.name !== 'Root' &&
     to.name !== 'NotFound'
   ) {

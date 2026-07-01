@@ -72,6 +72,15 @@ export const asyncChildren: RouteRecordRaw[] = [
     },
   },
   {
+    path: 'conversations',
+    name: 'Conversations',
+    component: () => import('@/pages/conversations/index.vue'),
+    meta: {
+      title: 'Conversation Center',
+      icon: 'ChatDotRound',
+    },
+  },
+  {
     path: 'role',
     name: 'Role',
     component: () => import('@/pages/role/index.vue'),

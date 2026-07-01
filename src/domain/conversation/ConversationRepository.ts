@@ -70,19 +70,112 @@ const conversationMockList: ConversationSnapshot[] = [
   },
 ]
 
+const STORAGE_KEY = 'enterprise-ai-platform:conversations'
+
+function cloneConversation(conversation: ConversationSnapshot): ConversationSnapshot {
+  return {
+    ...conversation,
+    metadata: {
+      ...conversation.metadata,
+      traceIds: [...conversation.metadata.traceIds],
+    },
+  }
+}
+
+function readConversations() {
+  if (typeof window === 'undefined') return conversationMockList.map(cloneConversation)
+
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY)
+    if (!raw) return conversationMockList.map(cloneConversation)
+
+    return (JSON.parse(raw) as ConversationSnapshot[]).map(cloneConversation)
+  } catch {
+    return conversationMockList.map(cloneConversation)
+  }
+}
+
+function writeConversations(conversations: ConversationSnapshot[]) {
+  if (typeof window === 'undefined') return
+
+  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(conversations))
+}
+
+function createId(prefix: string) {
+  return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`
+}
+
 export class ConversationRepository {
   async listByWorkspace(workspaceId: string) {
-    return conversationMockList.filter((conversation) => conversation.workspaceId === workspaceId)
+    return readConversations().filter((conversation) => conversation.workspaceId === workspaceId)
   }
 
   async listByApplication(applicationId: string) {
-    return conversationMockList.filter(
+    return readConversations().filter(
       (conversation) => conversation.applicationId === applicationId,
     )
   }
 
   async findById(id: string) {
-    return conversationMockList.find((conversation) => conversation.id === id) || null
+    return readConversations().find((conversation) => conversation.id === id) || null
+  }
+
+  async create(input: {
+    workspaceId: string
+    applicationId: string
+    title?: string
+    providerId?: string
+    promptTemplateId?: string
+    knowledgeBaseId?: string
+  }) {
+    const conversations = readConversations()
+    const timestamp = Date.now()
+    const conversation: ConversationSnapshot = {
+      id: createId('conversation'),
+      workspaceId: input.workspaceId,
+      applicationId: input.applicationId,
+      title: input.title?.trim() || 'New conversation',
+      messageCount: 0,
+      lastMessageAt: timestamp,
+      status: 'active',
+      metadata: {
+        traceIds: [],
+        providerId: input.providerId || 'provider-mock',
+        promptTemplateId: input.promptTemplateId || '',
+        knowledgeBaseId: input.knowledgeBaseId,
+        tokenTotal: 0,
+      },
+    }
+    writeConversations([conversation, ...conversations])
+
+    return cloneConversation(conversation)
+  }
+
+  async touch(id: string, patch: Partial<Pick<ConversationSnapshot, 'title' | 'messageCount'>>) {
+    const conversations = readConversations()
+    let updated: ConversationSnapshot | null = null
+    const nextConversations = conversations.map((conversation) => {
+      if (conversation.id !== id) return conversation
+
+      updated = {
+        ...conversation,
+        ...patch,
+        lastMessageAt: Date.now(),
+      }
+
+      return updated
+    })
+
+    writeConversations(nextConversations)
+
+    return updated ? cloneConversation(updated) : null
+  }
+
+  async delete(id: string) {
+    const nextConversations = readConversations().filter((conversation) => conversation.id !== id)
+    writeConversations(nextConversations)
+
+    return nextConversations.map(cloneConversation)
   }
 }
 

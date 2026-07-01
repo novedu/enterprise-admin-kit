@@ -232,6 +232,7 @@ const navigationGroups = computed(() => [
   {
     label: 'Runtime',
     items: [
+      { path: '/conversations', title: 'Conversations', icon: 'ChatDotRound' },
       { path: '/ai/observability', title: t('page.ai.tabs.observability'), icon: 'Monitor' },
       { path: '/ai/settings', title: t('page.ai.tabs.settings'), icon: 'Setting' },
     ],

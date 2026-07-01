@@ -358,6 +358,17 @@ export class ChatRuntime {
     this.emitSnapshot()
   }
 
+  openConversation(conversationId: string, messages: ChatMessage[] = []) {
+    if (!conversationId || this.isBusy()) return
+
+    this.ensureActiveSession(conversationId)
+    this.state.messages = cloneMessages(messages)
+    this.lastRequest = null
+    this.retryCount = 0
+    this.setStatus('idle')
+    this.emitSnapshot()
+  }
+
   private normalizeRequest(request: ChatRequest): ChatRequest {
     const config = this.readConfig()
     const conversationId =
