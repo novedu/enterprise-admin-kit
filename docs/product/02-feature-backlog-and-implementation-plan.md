@@ -30,7 +30,7 @@ This document records the unfinished work, the recommended implementation approa
 | Runtime Pipeline             | Implemented           | Needs richer trace linkage and UI-level inspection by execution step                                                     |
 | Conversation Center          | Implemented baseline  | Message persistence, token summary, trace references, and restore flow exist; next gap is deeper trace detail navigation |
 | Provider Center              | Partial               | Provider switching/config exists, but provider registry, health, credentials, and policies need domainization            |
-| Knowledge Center             | Partial               | Mock RAG engine exists, but knowledge assets are mostly not durable domain resources                                     |
+| Knowledge Center             | Implemented baseline  | Knowledge bases, documents, chunks, retrieval tests, and runtime injection are persisted; next gap is governance         |
 | Prompt Studio                | Partial               | Prompt engine exists, but prompt templates need versioning, lifecycle, bindings, and validation                          |
 | Observability                | Partial               | Runtime inspector exists, but trace detail, retention UI, and cross-linking are incomplete                               |
 | Runtime Settings             | Partial               | Configuration exists, but governance, diff preview, and applied profile history need consolidation                       |
@@ -70,21 +70,20 @@ This document records the unfinished work, the recommended implementation approa
 ## Recommended Execution Order
 
 ```text
-1. Knowledge Center Domainization
-2. Prompt Store and Prompt Versioning
-3. Observability Deep Linking
-4. Provider Gateway Store, Credentials, and Health
-5. Workspace Governance
-6. Application Runtime Release Binding
-7. Runtime Settings Governance
-8. Evaluation Center
-9. Agent Runtime
-10. Workflow Builder
-11. Plugin Marketplace
-12. Backend Integration Boundary
+1. Prompt Store and Prompt Versioning
+2. Observability Deep Linking
+3. Provider Gateway Store, Credentials, and Health
+4. Workspace Governance
+5. Application Runtime Release Binding
+6. Runtime Settings Governance
+7. Evaluation Center
+8. Agent Runtime
+9. Workflow Builder
+10. Plugin Marketplace
+11. Backend Integration Boundary
 ```
 
-Conversation Message Persistence has completed its first implementation baseline. The next seven items should be treated as the next major engineering focus. Agent, Workflow, and Marketplace should not be started until knowledge, prompt, provider, observability, workspace governance, and application runtime binding are properly scoped and linked.
+Conversation Message Persistence and Knowledge Center Domainization have completed their first implementation baselines. The next seven items should be treated as the next major engineering focus. Agent, Workflow, and Marketplace should not be started until prompt, provider, observability, workspace governance, and application runtime binding are properly scoped and linked.
 
 ## Dependency Map
 
@@ -237,9 +236,24 @@ Conversation persistence is the foundation of Conversation Center. It makes the 
 
 ### Current Status
 
-The mock RAG engine exists. It supports documents, chunking, retrieval, citation generation, and workspace-like structures. The UI exposes Knowledge Center workflows, but the domain is not yet fully durable or application-bound.
+The mock RAG engine exists. It supports documents, chunking, retrieval, citation generation, and workspace-like structures. Knowledge Center now has a baseline durable domain implementation backed by repository and store contracts.
 
-Knowledge state is still too close to control-plane local state. It must become a platform domain asset.
+Knowledge state has moved out of temporary Control Plane memory state into `KnowledgeRepository` and `KnowledgeStore`. The remaining work is document lifecycle governance, deletion/archive behavior, richer source metadata, and future backend/vector integration.
+
+### Implementation Status
+
+Implemented baseline:
+
+- Durable `KnowledgeBaseRecord`, `KnowledgeDocumentRecord`, and `KnowledgeChunkRecord` domain types.
+- `KnowledgeRepository` with localStorage-backed bases, documents, generated chunks, retrieval, and runtime KnowledgeBase construction.
+- `KnowledgeStore` for workspace-scoped active base, documents, chunks, retrieval results, and citations.
+- Knowledge Center page now reads from `KnowledgeStore` instead of scoped in-memory `KnowledgeWorkspace`.
+- Uploaded documents and generated chunks persist by workspace/base.
+- Chunk Viewer exposes persisted chunks and keywords in the UI.
+- Application knowledge binding updates when a knowledge base is selected or created.
+- Chat request injects the selected application knowledge base into ChatRuntime without making ChatRuntime depend on Pinia.
+- Runtime KnowledgeBase hydration preserves persisted document/chunk IDs for citation identity.
+- Repository tests cover base loading, upload/chunk generation, retrieval, and runtime hydration.
 
 ### Why It Matters
 
@@ -247,7 +261,7 @@ Knowledge is one of the main enterprise differentiators. A platform without dura
 
 ### Implementation Plan
 
-1. Create durable knowledge domain resources.
+1. Create durable knowledge domain resources. Completed.
 
    Model:
 
@@ -258,7 +272,7 @@ Knowledge is one of the main enterprise differentiators. A platform without dura
    - `Citation`
    - `KnowledgeBinding`
 
-2. Add a `KnowledgeRepository`.
+2. Add a `KnowledgeRepository`. Completed.
 
    The local implementation should support:
 
@@ -267,9 +281,9 @@ Knowledge is one of the main enterprise differentiators. A platform without dura
    - Add document.
    - Store generated chunks.
    - Retrieve chunks by query and topK.
-   - Delete or archive documents.
+   - Delete or archive documents. Pending.
 
-3. Add a `KnowledgeStore`.
+3. Add a `KnowledgeStore`. Completed.
 
    Responsibilities:
 
@@ -279,15 +293,15 @@ Knowledge is one of the main enterprise differentiators. A platform without dura
    - Retrieval test results.
    - UI loading/error state only.
 
-4. Bind knowledge to application runtime profile.
+4. Bind knowledge to application runtime profile. Completed as application knowledge base binding.
 
    Each application should reference the knowledge base used by runtime execution. A future application may support multiple knowledge bases, but the first implementation should keep one primary binding.
 
-5. Move Knowledge Center UI from temporary state to domain store.
+5. Move Knowledge Center UI from temporary state to domain store. Completed.
 
    The page should read from `KnowledgeStore`, call knowledge actions, and show persisted documents/chunks/retrieval results.
 
-6. Pass selected knowledge base into runtime pipeline.
+6. Pass selected knowledge base into runtime pipeline. Completed.
 
    ChatRuntime should continue to receive dependencies through runtime composition. It should not discover knowledge globally.
 
@@ -309,11 +323,13 @@ Knowledge Center becomes the RAG operations surface. It allows teams to maintain
 
 ### Acceptance Criteria
 
-- Knowledge bases persist by workspace.
-- Documents and chunks survive refresh.
-- Retrieval test results come from persisted chunks.
-- Application runtime can use the selected knowledge base.
-- Assistant citations reference persisted document/chunk identities.
+- Knowledge bases persist by workspace. Completed.
+- Documents and chunks survive refresh. Completed for localStorage baseline.
+- Retrieval test results come from persisted chunks. Completed.
+- Application runtime can use the selected knowledge base. Completed.
+- Assistant citations reference persisted document/chunk identities. Completed for hydrated runtime knowledge bases.
+- Knowledge documents can be archived/deleted with clear cascade policy. Pending.
+- Knowledge base can expose richer source metadata and document status. Pending.
 
 ## 3. Prompt Store and Prompt Versioning
 
@@ -1274,9 +1290,9 @@ Make Conversation Center durable and traceable.
 - Conversation list reflects message count, token total, and trace count. Completed.
 - No direct Pinia/Vue dependency is added to ChatRuntime. Completed.
 
-## Next Sprint Candidate: Knowledge Center Domainization
+## Completed Sprint: Knowledge Center Domainization
 
-The recommended next sprint should focus on Knowledge Center Domainization.
+Knowledge Center Domainization has completed its first implementation baseline.
 
 ### Sprint Goal
 
@@ -1284,12 +1300,12 @@ Turn Knowledge Center from a scoped runtime mock surface into a durable workspac
 
 ### Scope
 
-- Add durable `KnowledgeBase`, `KnowledgeDocument`, and `KnowledgeChunk` repository contracts.
-- Add `KnowledgeStore`.
-- Persist uploaded documents and generated chunks by workspace.
-- Bind an application to a primary knowledge base.
-- Make retrieval tests read from persisted chunks.
-- Preserve citation identities from retrieval to assistant messages and traces.
+- Add durable `KnowledgeBase`, `KnowledgeDocument`, and `KnowledgeChunk` repository contracts. Completed.
+- Add `KnowledgeStore`. Completed.
+- Persist uploaded documents and generated chunks by workspace. Completed.
+- Bind an application to a primary knowledge base. Completed.
+- Make retrieval tests read from persisted chunks. Completed.
+- Preserve citation identities from retrieval to assistant messages and traces. Completed.
 
 ### Out of Scope
 
@@ -1301,22 +1317,66 @@ Turn Knowledge Center from a scoped runtime mock surface into a durable workspac
 
 ### Technical Steps
 
-1. Define durable knowledge domain types.
-2. Implement local repository for knowledge bases, documents, and chunks.
-3. Move Knowledge Center page state from temporary composable state to `KnowledgeStore`.
-4. Connect application runtime binding to selected knowledge base.
-5. Ensure ChatRuntime receives knowledge dependencies through runtime composition.
-6. Add retrieval test persistence and citation preview.
-7. Add repository and retrieval tests.
+1. Define durable knowledge domain types. Completed.
+2. Implement local repository for knowledge bases, documents, and chunks. Completed.
+3. Move Knowledge Center page state from temporary composable state to `KnowledgeStore`. Completed.
+4. Connect application runtime binding to selected knowledge base. Completed.
+5. Ensure ChatRuntime receives knowledge dependencies through runtime composition. Completed.
+6. Add retrieval test persistence and citation preview. Completed.
+7. Add repository and retrieval tests. Completed.
 
 ### Acceptance Criteria
 
-- Knowledge bases persist by workspace.
-- Uploaded mock documents survive refresh.
-- Chunks are visible and linked to documents.
-- Retrieval tests use persisted chunks.
-- Application runtime can use the selected knowledge base.
-- Assistant citations reference persisted document/chunk identities.
+- Knowledge bases persist by workspace. Completed.
+- Uploaded mock documents survive refresh. Completed.
+- Chunks are visible and linked to documents. Completed.
+- Retrieval tests use persisted chunks. Completed.
+- Application runtime can use the selected knowledge base. Completed.
+- Assistant citations reference persisted document/chunk identities. Completed.
+
+## Next Sprint Candidate: Prompt Store and Prompt Versioning
+
+The recommended next sprint should focus on Prompt Store and Prompt Versioning.
+
+### Sprint Goal
+
+Turn Prompt Studio from runtime template editing into a durable PromptOps domain with template lifecycle, versions, validation, preview, and application binding.
+
+### Scope
+
+- Add durable `PromptTemplateRecord` and `PromptVersionRecord` contracts.
+- Add `PromptRepository`.
+- Add `PromptStore`.
+- Persist prompt drafts and published versions by workspace.
+- Bind an application to a selected prompt version.
+- Make Prompt Studio read templates/versions from store instead of in-memory PromptEngine state.
+- Record prompt template/version identity into runtime traces.
+
+### Out of Scope
+
+- Approval workflow.
+- Prompt evaluation scoring.
+- Prompt marketplace.
+- Multi-party review comments.
+- Production backend API.
+
+### Technical Steps
+
+1. Define durable prompt domain types.
+2. Implement local repository for templates and versions.
+3. Add prompt store with selected template/version, draft, preview, and validation state.
+4. Move Prompt Studio state from local PromptEngine instance to store/repository.
+5. Keep PromptEngine as the rendering engine, not the persistence layer.
+6. Bind application promptTemplateId to selected published version.
+7. Add tests for template create, version publish, preview rendering, and binding.
+
+### Acceptance Criteria
+
+- Prompt templates persist by workspace.
+- Prompt versions can be created and selected.
+- Application can bind to a prompt version.
+- Prompt preview uses the same rendering engine as runtime.
+- Runtime trace records prompt template/version reference.
 
 ## Release Framing
 

@@ -8,6 +8,7 @@ import {
   useApplicationStore,
   useChatStore,
   useConversationStore,
+  useKnowledgeStore,
   useRuntimeProfileStore,
   useWorkspaceStore,
 } from '@/store'
@@ -34,6 +35,7 @@ export function useChatRuntime() {
   const workspace = useWorkspaceStore()
   const application = useApplicationStore()
   const conversation = useConversationStore()
+  const knowledge = useKnowledgeStore()
   const scopeKey = computed(
     () =>
       `${workspace.currentWorkspace?.id || 'global'}:${application.currentApplication?.id || 'global'}`,
@@ -168,6 +170,11 @@ export function useChatRuntime() {
         conversationId: snapshot.activeSessionId,
         messages: runtime.getMessages().concat(userMessage),
         model: runtime.getDefaultModel(),
+        knowledgeBase: application.currentApplication?.knowledgeBaseId
+          ? await knowledge.buildRuntimeKnowledgeBase(
+              application.currentApplication.knowledgeBaseId,
+            )
+          : undefined,
       }
 
       const result = await runtime.sendMessage(request)

@@ -77,6 +77,40 @@ export class KnowledgeBase {
     return document
   }
 
+  hydrateDocument(document: KnowledgeDocument) {
+    const title = document.title.trim()
+    const content = document.content.trim()
+    const maxDocumentChars = this.options.maxDocumentChars ?? DEFAULT_MAX_DOCUMENT_CHARS
+    const maxDocuments = this.options.maxDocuments ?? DEFAULT_MAX_DOCUMENTS
+
+    if (!document.id || !title || !content) {
+      throw new Error('Knowledge document id, title and content are required.')
+    }
+
+    if (content.length > maxDocumentChars) {
+      throw new Error(`Knowledge document exceeds ${maxDocumentChars} characters and was rejected.`)
+    }
+
+    if (!this.documents.has(document.id) && this.documents.size >= maxDocuments) {
+      throw new Error(`Knowledge base ${this.id} reached the ${maxDocuments} document limit.`)
+    }
+
+    const normalizedDocument: KnowledgeDocument = {
+      ...document,
+      workspaceId: this.id,
+      title,
+      content,
+    }
+    const chunks = chunkDocument(normalizedDocument, {
+      chunkSize: normalizeChunkSize(this.options.chunkSize),
+    })
+
+    this.documents.set(normalizedDocument.id, normalizedDocument)
+    this.chunks.set(normalizedDocument.id, chunks)
+
+    return normalizedDocument
+  }
+
   getDocuments() {
     return Array.from(this.documents.values()).map((document) => ({ ...document }))
   }

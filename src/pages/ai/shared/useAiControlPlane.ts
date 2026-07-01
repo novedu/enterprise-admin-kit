@@ -3,8 +3,6 @@ import type { Ref } from 'vue'
 
 import { useChatRuntime } from '@/ai/composables/useChatRuntime'
 import { runtimeEventBus } from '@/ai/events/runtimeBus'
-import { KnowledgeWorkspace } from '@/ai/knowledge'
-import type { KnowledgeChunk, KnowledgeCitation, KnowledgeDocument } from '@/ai/knowledge'
 import { RuntimeInspector } from '@/ai/observability'
 import type { RuntimeInspectionSnapshot, TraceStatus } from '@/ai/observability'
 import { PromptEngine } from '@/ai/prompt'
@@ -13,6 +11,7 @@ import type { AIConfigPatch, AIProviderName, CompressionStrategy } from '@/ai/ty
 import {
   useAiConfigStore,
   useApplicationStore,
+  useKnowledgeStore,
   useRuntimeProfileStore,
   useWorkspaceStore,
 } from '@/store'
@@ -63,19 +62,6 @@ interface ScopeIdentity {
   applicationId: string
 }
 
-interface KnowledgeConsoleState {
-  workspace: KnowledgeWorkspace
-  activeKnowledgeBaseId: Ref<string>
-  newKnowledgeBaseName: Ref<string>
-  documentTitle: Ref<string>
-  documentContent: Ref<string>
-  retrievalQuery: Ref<string>
-  retrievalTopK: Ref<number>
-  documents: Ref<KnowledgeDocument[]>
-  retrievedChunks: Ref<KnowledgeChunk[]>
-  citations: Ref<KnowledgeCitation[]>
-}
-
 interface PromptStudioState {
   engine: PromptEngine
   selectedTemplateId: Ref<string>
@@ -87,52 +73,12 @@ interface PromptStudioState {
   templates: Ref<PromptTemplate[]>
 }
 
-const knowledgeStates = new Map<string, KnowledgeConsoleState>()
 const promptStates = new Map<string, PromptStudioState>()
 
 function createScopeKey(scope: ScopeIdentity) {
   if (!scope.workspaceId || !scope.applicationId) return FALLBACK_SCOPE_KEY
 
   return `workspace:${scope.workspaceId}/application:${scope.applicationId}`
-}
-
-function getScopedKnowledgeState(scopeKey: string) {
-  const cached = knowledgeStates.get(scopeKey)
-  if (cached) return cached
-
-  const knowledgeWorkspace = new KnowledgeWorkspace()
-  const defaultKnowledgeBase = knowledgeWorkspace.createKnowledgeBase({
-    id: 'runtime-docs',
-    name: 'Runtime Docs',
-    chunkSize: 360,
-  })
-  defaultKnowledgeBase.uploadDocument({
-    title: 'Runtime Architecture',
-    content:
-      'ChatRuntime orchestrates context building, knowledge retrieval, prompt construction and provider streaming. ContextManager controls token windows and compression. PromptEngine renders final prompts. KnowledgeBase provides mock RAG citations.',
-  })
-
-  const retrievalQuery = ref('runtime prompt knowledge')
-  const retrievalTopK = ref(3)
-  const retrievalResult = defaultKnowledgeBase.query(retrievalQuery.value, {
-    topK: retrievalTopK.value,
-  })
-  const state: KnowledgeConsoleState = {
-    workspace: knowledgeWorkspace,
-    activeKnowledgeBaseId: ref(defaultKnowledgeBase.id),
-    newKnowledgeBaseName: ref('Security Runbook'),
-    documentTitle: ref('Knowledge Notes'),
-    documentContent: ref(''),
-    retrievalQuery,
-    retrievalTopK,
-    documents: ref(defaultKnowledgeBase.getDocuments()),
-    retrievedChunks: ref(retrievalResult.chunks),
-    citations: ref(retrievalResult.citations),
-  }
-
-  knowledgeStates.set(scopeKey, state)
-
-  return state
 }
 
 function createDefaultPromptVariables() {
@@ -333,84 +279,89 @@ export function useProviderCenter() {
 
 export function useKnowledgeConsole() {
   const aiScope = useAiScope()
+  const knowledge = useKnowledgeStore()
+  const application = useApplicationStore()
   onMounted(aiScope.ensureAiScope)
-  const scopeKey = computed(() =>
-    createScopeKey({
-      workspaceId: aiScope.workspaceId.value,
-      applicationId: aiScope.applicationId.value,
-    }),
-  )
-  const scopedState = computed(() => getScopedKnowledgeState(scopeKey.value))
-  const activeKnowledgeBaseId = createWritableScopedRef(
-    () => scopedState.value.activeKnowledgeBaseId,
-  )
-  const newKnowledgeBaseName = createWritableScopedRef(() => scopedState.value.newKnowledgeBaseName)
-  const documentTitle = createWritableScopedRef(() => scopedState.value.documentTitle)
-  const documentContent = createWritableScopedRef(() => scopedState.value.documentContent)
-  const retrievalQuery = createWritableScopedRef(() => scopedState.value.retrievalQuery)
-  const retrievalTopK = createWritableScopedRef(() => scopedState.value.retrievalTopK)
-  const documents = computed(() => scopedState.value.documents.value)
-  const retrievedChunks = computed(() => scopedState.value.retrievedChunks.value)
-  const citations = computed(() => scopedState.value.citations.value)
-  const activeKnowledgeBase = computed(() =>
-    scopedState.value.workspace.getKnowledgeBase(activeKnowledgeBaseId.value),
-  )
-  const knowledgeBases = computed(() => scopedState.value.workspace.listKnowledgeBases())
+  const activeKnowledgeBaseId = computed({
+    get: () => knowledge.activeKnowledgeBaseId,
+    set: (value: string) => {
+      knowledge.activeKnowledgeBaseId = value
+    },
+  })
+  const newKnowledgeBaseName = ref('Security Runbook')
+  const documentTitle = ref('Knowledge Notes')
+  const documentContent = ref('')
+  const retrievalQuery = ref('runtime prompt knowledge')
+  const retrievalTopK = ref(3)
+  const documents = computed(() => knowledge.documents)
+  const chunks = computed(() => knowledge.chunks)
+  const retrievedChunks = computed(() => knowledge.retrievedChunks)
+  const citations = computed(() => knowledge.citations)
+  const activeKnowledgeBase = computed(() => knowledge.activeKnowledgeBase)
+  const knowledgeBases = computed(() => knowledge.knowledgeBases)
 
-  function refreshKnowledgeState() {
-    const base = activeKnowledgeBase.value
-    scopedState.value.documents.value = base?.getDocuments() || []
+  async function ensureKnowledgeScope() {
+    await aiScope.ensureAiScope()
+    if (!aiScope.workspaceId.value) return
+
+    await knowledge.loadKnowledgeBases(
+      aiScope.workspaceId.value,
+      aiScope.currentApplication.value?.knowledgeBaseId,
+    )
   }
 
-  function createKnowledgeBase() {
+  watch(
+    () => [aiScope.workspaceId.value, aiScope.currentApplication.value?.knowledgeBaseId],
+    ensureKnowledgeScope,
+    { immediate: true },
+  )
+
+  async function createKnowledgeBase() {
     const name = newKnowledgeBaseName.value.trim()
-    if (!name) return
+    const workspaceId = aiScope.workspaceId.value
+    if (!name || !workspaceId) return
 
-    const id = name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '')
-
-    const base = scopedState.value.workspace.createKnowledgeBase({
-      id: `${id || 'knowledge'}-${Date.now()}`,
+    const base = await knowledge.createKnowledgeBase({
+      workspaceId,
       name,
-      chunkSize: 360,
     })
 
-    activeKnowledgeBaseId.value = base.id
     newKnowledgeBaseName.value = ''
-    refreshKnowledgeState()
+    if (application.currentApplication) {
+      await application.updateApplication(application.currentApplication.id, {
+        knowledgeBaseId: base.id,
+      })
+    }
   }
 
-  function uploadKnowledgeDocument() {
-    const base = activeKnowledgeBase.value
+  async function uploadKnowledgeDocument() {
+    const workspaceId = aiScope.workspaceId.value
+    const knowledgeBaseId = activeKnowledgeBaseId.value
     const content = documentContent.value.trim()
-    if (!base || !content) return
+    if (!workspaceId || !knowledgeBaseId || !content) return
 
-    base.uploadDocument({
+    await knowledge.uploadDocument({
+      workspaceId,
+      knowledgeBaseId,
       title: documentTitle.value.trim() || 'Untitled Document',
       content,
     })
     documentContent.value = ''
     documentTitle.value = 'Knowledge Notes'
-    refreshKnowledgeState()
   }
 
-  function runRetrieval() {
-    const base = activeKnowledgeBase.value
-    if (!base) return
-
-    const result = base.query(retrievalQuery.value, {
-      topK: retrievalTopK.value,
-    })
-    scopedState.value.retrievedChunks.value = result.chunks
-    scopedState.value.citations.value = result.citations
+  async function runRetrieval() {
+    await knowledge.runRetrieval(retrievalQuery.value, retrievalTopK.value)
   }
 
-  function switchKnowledgeBase(id: string) {
-    scopedState.value.workspace.switchKnowledgeBase(id)
-    refreshKnowledgeState()
-    runRetrieval()
+  async function switchKnowledgeBase(id: string) {
+    await knowledge.switchKnowledgeBase(id)
+    if (application.currentApplication) {
+      await application.updateApplication(application.currentApplication.id, {
+        knowledgeBaseId: id,
+      })
+    }
+    await runRetrieval()
   }
 
   return {
@@ -422,6 +373,7 @@ export function useKnowledgeConsole() {
     activeKnowledgeBase,
     activeKnowledgeBaseId,
     knowledgeBases,
+    chunks,
     newKnowledgeBaseName,
     documentTitle,
     documentContent,
@@ -497,14 +449,12 @@ export function usePromptStudio() {
     const variables = parsePromptVariables()
     if (!variables) return
 
-    const knowledgeState = getScopedKnowledgeState(scopeKey.value)
-
     promptPreview.value = scopedState.value.engine.buildFromContext(selectedTemplateId.value, {
       systemPrompt: systemPromptDraft.value,
       userPrompt: String(variables.input || ''),
       variables,
-      retrievedDocuments: knowledgeState.retrievedChunks.value,
-      citations: knowledgeState.citations.value,
+      retrievedDocuments: useKnowledgeStore().retrievedChunks,
+      citations: useKnowledgeStore().citations,
     })
   }
 
