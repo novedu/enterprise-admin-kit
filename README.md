@@ -1,5 +1,18 @@
 # Enterprise Admin Kit
 
+![License](https://img.shields.io/badge/license-MIT-blue)
+![Vue](https://img.shields.io/badge/Vue-3-42b883)
+![TypeScript](https://img.shields.io/badge/TypeScript-5-3178c6)
+
+> **中文简介** — 面向 **ERP / OA** 等复杂企业系统的中后台框架，加一层 LLM 运行时分层架构。
+> 把 AI 从「写死在页面里的功能」变成「可配置、可调试的运行时模块」，并配套 RBAC 四级权限与
+> **Multi-Tenant 多租户隔离**。
+>
+> **技术栈** Vue3 · TypeScript · Vite · Pinia · Element Plus · UnoCSS · RBAC · Multi-Tenant
+>
+> ⚠️ **实现边界（如实披露）** 见下方 [Provider 实现状态](#provider-实现状态如实说明)：
+> Provider 为 **Mock / Stub 实现，尚未接入真实模型**；Knowledge 为关键词检索的示例知识库。
+
 A modern enterprise-level admin starter based on Vue3 + TypeScript.
 
 中文：一个面向企业后台系统与 AI Runtime 控制台的企业级前端框架（Enterprise AI Control Plane + Admin System）。
@@ -14,7 +27,7 @@ It is an:
 
 It combines:
 
-- Enterprise Admin System: RBAC, schema-driven UI and CRUD engine
+- Enterprise Admin System: RBAC, **Multi-Tenant isolation**, schema-driven UI and CRUD engine
 - AI Runtime Framework: ChatRuntime, Provider, Context, Prompt, Knowledge and Observability
 - AI Control Plane: configuration, debugging, prompt operations and runtime observability UI
 
@@ -90,6 +103,26 @@ This turns AI behavior from a code-driven feature into a configuration-driven ru
 - RuntimeGuard for state transition, timeout, retry, token and circuit-breaker protection
 - AI Config governance with schema validation, config diff preview and safe fallback
 - Streaming chat with stop, retry and clear behavior through the runtime bridge
+
+### Provider 实现状态（如实说明）
+
+避免误读，这里明确列出每个 Provider 的**实际实现程度**：
+
+| Provider | 状态 | 说明 |
+|---|---|---|
+| `MockProvider` | ✅ 已实现 | 离线演示与本地开发，返回预设响应 |
+| `StubProvider` | ✅ 已实现 | 用于验证 Provider 契约与错误归一化路径 |
+| `OpenAI` | ⛔ **未接入** | 仅保留 `type` 声明与能力契约，**无真实 HTTP 调用** |
+| `Claude` | ⛔ **未接入** | 同上 |
+| `Qwen` | ⛔ **未接入** | 同上 |
+| `DeepSeek` | ⛔ **未接入** | 同上 |
+
+源码可验证：`src/ai/providers/` 下只有 `MockProvider.ts`(101 行) 与 `StubProvider.ts`(84 行)，
+全仓库 `fetch(` 与 `chat/completions` **出现 0 处**。
+
+> 真实 LLM 调用在作者另外两个项目中验证：
+> [spark-workshop](https://github.com/novedu/spark-workshop)（9 个服务端代理路由）
+> 与 [agent-studio](https://github.com/novedu/agent-studio)（`OpenAIProvider`）。
 
 ### AI Admin Console (`/ai`)
 
@@ -170,9 +203,12 @@ Observability is bounded by design:
 
 This makes the AI system inspectable without coupling debug logic into ChatRuntime or UI components.
 
-## Production Hardening
+## Runtime Guardrails（架构探索）
 
-The runtime has been hardened from an advanced demo architecture into a production-grade engineering blueprint.
+以下是在**架构层面**设计的健壮性机制。
+
+> ⚠️ 需要明确：当前 Provider 为 Mock / Stub 实现、Knowledge 为关键词检索，
+> 这些机制用于验证设计思路与边界处理方式，**不代表已在生产环境运行**。
 
 ### Configuration Governance
 
@@ -208,13 +244,17 @@ type ProviderCredential = {
 
 ### RAG Governance
 
+> 说明：以下治理规则作用于**关键词检索的示例知识库**，非向量检索实现。
+
 - Knowledge documents are scoped by workspace
 - Oversized documents are rejected
 - Chunk size is clamped to a safe range
 - Retrieval `topK` is capped
 - Retrieval score is bounded
 
-### Provider Hardening
+### Provider 契约与错误归一化
+
+> 说明：以下能力契约已定义，但**当前仅由 Mock / Stub 实现**，真实 Provider 未接入。
 
 Providers expose a common capability contract:
 
@@ -382,14 +422,14 @@ Current expected build warnings:
 
 - Why AI Runtime should be event-driven instead of component-driven
 - Why ChatRuntime owns streaming, cancellation, retry and message state transitions
-- Why Provider abstraction enables multi-model scalability
+- Why Provider abstraction enables multi-model switching without touching upper layers
 - Why ContextManager is critical for LLM token constraints
 - Why Prompt must be treated as a runtime asset
-- Why Observability is required for production AI systems
+- Why Observability matters for enterprise AI applications
 - Why UI must be separated from the AI execution layer
 - Why Provider credentials belong to the AI Config Center instead of page-local state
 - Why frontend AI platforms should store credential references, not raw keys
-- Why production AI runtime needs config validation, bounded observability and runtime guardrails
+- Why an LLM runtime needs config validation, bounded observability and runtime guardrails
 - Why an AI Control Plane is necessary for enterprise usage
 
 ## Roadmap
