@@ -10,8 +10,7 @@
 >
 > **技术栈** Vue3 · TypeScript · Vite · Pinia · Element Plus · UnoCSS · RBAC · Multi-Tenant
 >
-> ⚠️ **实现边界（如实披露）** 见下方 [Provider 实现状态](#provider-实现状态如实说明)：
-> Provider 为 **Mock / Stub 实现，尚未接入真实模型**；Knowledge 为关键词检索的示例知识库。
+> Provider 为 **Mock / Stub 实现**，Knowledge 为关键词检索。详见 [Provider 实现状态](#provider-实现状态)。
 
 A modern enterprise-level admin starter based on Vue3 + TypeScript.
 
@@ -104,9 +103,9 @@ This turns AI behavior from a code-driven feature into a configuration-driven ru
 - AI Config governance with schema validation, config diff preview and safe fallback
 - Streaming chat with stop, retry and clear behavior through the runtime bridge
 
-### Provider 实现状态（如实说明）
+### Provider 实现状态
 
-避免误读，这里明确列出每个 Provider 的**实际实现程度**：
+各 Provider 的实现程度：
 
 | Provider | 状态 | 说明 |
 |---|---|---|
@@ -207,8 +206,7 @@ This makes the AI system inspectable without coupling debug logic into ChatRunti
 
 以下是在**架构层面**设计的健壮性机制。
 
-> ⚠️ 需要明确：当前 Provider 为 Mock / Stub 实现、Knowledge 为关键词检索，
-> 这些机制用于验证设计思路与边界处理方式，**不代表已在生产环境运行**。
+> 这些机制目前在 Mock / Stub 实现与关键词检索知识库上验证，属架构层面的设计。
 
 ### Configuration Governance
 
@@ -244,7 +242,7 @@ type ProviderCredential = {
 
 ### RAG Governance
 
-> 说明：以下治理规则作用于**关键词检索的示例知识库**，非向量检索实现。
+> 以下治理规则作用于关键词检索的示例知识库。
 
 - Knowledge documents are scoped by workspace
 - Oversized documents are rejected
@@ -254,7 +252,7 @@ type ProviderCredential = {
 
 ### Provider 契约与错误归一化
 
-> 说明：以下能力契约已定义，但**当前仅由 Mock / Stub 实现**，真实 Provider 未接入。
+> 以下能力契约由 Mock / Stub 实现。
 
 Providers expose a common capability contract:
 
